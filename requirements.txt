@@ -1,0 +1,8 @@
+# External dependency - not managed by pip
+# papilio-prog must be installed separately from:
+# http://papilio.cc/index.php?n=Papilio.PapilioLoaderV2
+#
+# Add papilio-prog to your system PATH after installation
+
+# All Python dependencies are managed in pyproject.toml
+# Install with: uv pip install -e .

@@ -1,0 +1,20 @@
+[project]
+name = "papilio-loader-mcp"
+version = "0.1.0"
+description = "MCP server for loading FPGA bit files and ESP32 firmware over network"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.127.0",
+    "mcp>=1.25.0",
+    "pyserial>=3.5",
+    "uvicorn>=0.40.0",
+    "python-multipart>=0.0.21",
+]
+
+[project.scripts]
+papilio-loader-mcp = "papilio_loader_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

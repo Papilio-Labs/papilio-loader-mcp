@@ -1,0 +1,3 @@
+[submodule "tools/pesptool"]
+	path = tools/pesptool
+	url = https://github.com/GadgetFactory/esptool.git
