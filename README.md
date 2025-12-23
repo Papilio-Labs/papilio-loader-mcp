@@ -7,7 +7,7 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
 - **REST API**: FastAPI-based HTTP API for remote network access
 - **Unified Programming Tool**: Uses pesptool (GadgetFactory's esptool fork) for both FPGA and ESP32 programming
-- **Papilio FPGA Support**: Flash Papilio FPGA boards with bit files via pesptool
+- **Gowin FPGA Support**: Flash Papilio boards (Gowin FPGA) with .bin files via pesptool
 - **ESP32 Support**: Flash ESP32 devices with bin/elf files, supports multi-partition flashing
 - **Network-based**: Run on Windows with serial port access, control from WSL/Linux over network
 

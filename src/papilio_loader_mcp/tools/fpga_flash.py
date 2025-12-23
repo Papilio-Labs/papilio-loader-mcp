@@ -7,11 +7,11 @@ from pathlib import Path
 
 async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> str:
     """
-    Flash a Papilio FPGA device with a bitstream file using pesptool.
+    Flash a Papilio board with Gowin FPGA using pesptool.
     
     Args:
         port: Serial port
-        file_path: Path to .bit file
+        file_path: Path to .bin file (Gowin FPGA bitstream)
         verify: Whether to verify after flashing
     
     Returns:
@@ -26,11 +26,11 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
             "error": f"File not found: {file_path}"
         }, indent=2)
     
-    # Check file extension
-    if file_path_obj.suffix.lower() not in ['.bit', '.bin']:
+    # Check file extension - only .bin supported for Gowin FPGA
+    if file_path_obj.suffix.lower() != '.bin':
         return json.dumps({
             "success": False,
-            "error": f"Invalid file type: {file_path_obj.suffix}. Expected .bit or .bin"
+            "error": f"Invalid file type: {file_path_obj.suffix}. Only .bin files supported for Gowin FPGA (not .bit)"
         }, indent=2)
     
     try:

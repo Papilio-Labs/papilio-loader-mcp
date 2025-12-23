@@ -74,7 +74,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="flash_device",
-            description="Flash a device with firmware/bitstream. Supports FPGA bit files and ESP32 firmware (bin/elf)",
+            description="Flash a device with firmware. Supports Gowin FPGA .bin files and ESP32 firmware (.bin/.elf)",
             inputSchema={
                 "type": "object",
                 "properties": {
