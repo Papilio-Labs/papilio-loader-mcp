@@ -6,9 +6,9 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
 - **REST API**: FastAPI-based HTTP API for remote network access
-- **FPGA Programming**: Flash Papilio FPGA boards using papilio-prog
-- **ESP32 Programming**: Flash ESP32 devices using pesptool (bundled esptool fork from GadgetFactory)
-- **Multi-format Support**: Handles FPGA bit files, ESP32 bin/elf files, and multi-partition flashing
+- **Unified Programming Tool**: Uses pesptool (GadgetFactory's esptool fork) for both FPGA and ESP32 programming
+- **Papilio FPGA Support**: Flash Papilio FPGA boards with bit files via pesptool
+- **ESP32 Support**: Flash ESP32 devices with bin/elf files, supports multi-partition flashing
 - **Network-based**: Run on Windows with serial port access, control from WSL/Linux over network
 
 ## Architecture
@@ -19,8 +19,8 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 │  Build Machine  │      HTTP/MCP           │   MCP Server     │
 │                 │                         │                  │
 │ - Build FPGA    │                         │ - pyserial       │
-│ - Build ESP32   │                         │ - papilio-prog   │
-│ - Send files    │                         │ - pesptool       │
+│ - Build ESP32   │                         │ - pesptool       │
+│ - Send files    │                         │   (unified tool) │
 └─────────────────┘                         └────────┬─────────┘
                                                      │ USB/Serial
                                                      ▼
@@ -35,10 +35,9 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 ### Prerequisites
 
 1. **Python 3.12+**: Required for running the server
-2. **papilio-prog**: External dependency for FPGA programming
-   - Download from [Papilio Loader](http://papilio.cc/index.php?n=Papilio.PapilioLoaderV2)
-   - Add to your system PATH
-3. **pesptool**: Included as git submodule (GadgetFactory's esptool fork)
+2. **pesptool**: Included as git submodule (GadgetFactory's esptool fork)
+   - Unified tool for programming both Papilio FPGA and ESP32 devices
+   - No additional tools needed - pesptool handles everything!
 
 ### Setup
 
@@ -273,11 +272,7 @@ curl -X POST http://localhost:8000/flash/upload \
 ### pesptool Not Found
 - Ensure git submodules are initialized: `git submodule update --init`
 - Check that `tools/pesptool/esptool.py` exists
-
-### papilio-prog Not Found
-- Download and install Papilio Loader
-- Add papilio-prog to your system PATH
-- Verify with: `papilio-prog --version`
+- pesptool is the unified tool for both FPGA and ESP32 programming
 
 ## License
 

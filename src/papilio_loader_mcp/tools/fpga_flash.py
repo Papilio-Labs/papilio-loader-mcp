@@ -1,14 +1,13 @@
-"""FPGA flashing using papilio-prog."""
+"""FPGA flashing using pesptool (GadgetFactory esptool fork)."""
 
 import json
 import asyncio
-import shutil
 from pathlib import Path
 
 
 async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> str:
     """
-    Flash an FPGA device with a bitstream file.
+    Flash a Papilio FPGA device with a bitstream file using pesptool.
     
     Args:
         port: Serial port
@@ -34,21 +33,29 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
             "error": f"Invalid file type: {file_path_obj.suffix}. Expected .bit or .bin"
         }, indent=2)
     
-    # Look for papilio-prog binary
-    papilio_prog = shutil.which("papilio-prog")
-    
-    if not papilio_prog:
-        return json.dumps({
-            "success": False,
-            "error": "papilio-prog not found in PATH. Please install papilio-prog.",
-            "info": "papilio-prog is required for FPGA programming. Document as external dependency."
-        }, indent=2)
-    
     try:
-        # Build command
-        cmd = [papilio_prog, "-p", port, "-f", str(file_path_obj)]
+        # Use pesptool from the tools/pesptool directory
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        
+        if not pesptool_path.exists():
+            return json.dumps({
+                "success": False,
+                "error": "pesptool (esptool.py) not found in tools/pesptool directory"
+            }, indent=2)
+        
+        # Build command for FPGA flashing
+        # pesptool uses write_flash command with FPGA-specific addressing
+        cmd = [
+            "python",
+            str(pesptool_path),
+            "--port", port,
+            "write_flash",
+            "0x0",  # FPGA bitstreams typically start at 0x0
+            str(file_path_obj)
+        ]
+        
         if verify:
-            cmd.append("-v")
+            cmd.insert(4, "--verify")
         
         # Execute flashing
         proc = await asyncio.create_subprocess_exec(
@@ -67,7 +74,8 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
             "port": port,
             "file": str(file_path_obj),
             "verified": verify,
-            "output": output
+            "output": output,
+            "tool": "pesptool (GadgetFactory esptool fork)"
         }, indent=2)
         
     except Exception as e:

@@ -25,15 +25,45 @@ async def get_device_info(port: str, device_type: str) -> str:
 
 
 async def _get_fpga_info(port: str) -> str:
-    """Get FPGA device information using papilio-prog."""
-    # TODO: Implement papilio-prog detection
-    # For now, return placeholder
-    return json.dumps({
-        "device_type": "fpga",
-        "port": port,
-        "status": "Connected",
-        "info": "FPGA device detection requires papilio-prog binary"
-    }, indent=2)
+    """Get Papilio FPGA device information using pesptool."""
+    try:
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        
+        # Use flash_id to detect device
+        proc = await asyncio.create_subprocess_exec(
+            "python",
+            str(pesptool_path),
+            "--port", port,
+            "flash_id",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        stdout, stderr = await proc.communicate()
+        
+        if proc.returncode == 0:
+            output = stdout.decode() + stderr.decode()
+            return json.dumps({
+                "device_type": "fpga",
+                "port": port,
+                "status": "Connected",
+                "output": output,
+                "tool": "pesptool"
+            }, indent=2)
+        else:
+            return json.dumps({
+                "device_type": "fpga",
+                "port": port,
+                "status": "Error",
+                "error": stderr.decode()
+            }, indent=2)
+            
+    except Exception as e:
+        return json.dumps({
+            "device_type": "fpga",
+            "port": port,
+            "error": str(e)
+        }, indent=2)
 
 
 async def _get_esp32_info(port: str) -> str:
