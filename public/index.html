@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Papilio Loader - FPGA & ESP32 Firmware Upload</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .device-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .upload-section {
+            display: none;
+        }
+
+        .upload-section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            border: 2px dashed #e0e0e0;
+            border-radius: 6px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .file-input-wrapper:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .file-input-wrapper.drag-over {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
+        input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+        }
+
+        .file-info {
+            margin-top: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .upload-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 20px;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .refresh-ports {
+            background: #f5f5f5;
+            color: #333;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .refresh-ports:hover {
+            background: #e0e0e0;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Papilio Loader</h1>
+        <p class="subtitle">Upload FPGA bitfiles or ESP32 firmware to your Papilio board</p>
+
+        <div class="alert" id="alert"></div>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Uploading firmware...</p>
+        </div>
+
+        <div class="device-tabs">
+            <button class="tab active" data-device="fpga">FPGA (.bit)</button>
+            <button class="tab" data-device="esp32">ESP32 (.bin)</button>
+        </div>
+
+        <div class="upload-section active" id="fpga-section">
+            <form id="fpga-form">
+                <div class="form-group">
+                    <label for="fpga-port">Serial Port</label>
+                    <select id="fpga-port" required>
+                        <option value="">Select a port...</option>
+                    </select>
+                    <button type="button" class="refresh-ports" onclick="loadPorts()">Refresh Ports</button>
+                </div>
+
+                <div class="form-group">
+                    <label>FPGA Bitfile (.bit)</label>
+                    <div class="file-input-wrapper" id="fpga-drop-zone">
+                        <input type="file" id="fpga-file" accept=".bit" required>
+                        <p>📁 Click or drag and drop your .bit file here</p>
+                        <p class="file-info" id="fpga-file-info"></p>
+                    </div>
+                </div>
+
+                <button type="submit" class="upload-btn">Upload to FPGA</button>
+            </form>
+        </div>
+
+        <div class="upload-section" id="esp32-section">
+            <form id="esp32-form">
+                <div class="form-group">
+                    <label for="esp32-port">Serial Port</label>
+                    <select id="esp32-port" required>
+                        <option value="">Select a port...</option>
+                    </select>
+                    <button type="button" class="refresh-ports" onclick="loadPorts()">Refresh Ports</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="esp32-address">Flash Address (hex)</label>
+                    <input type="text" id="esp32-address" value="0x1000" placeholder="0x1000">
+                </div>
+
+                <div class="form-group">
+                    <label>ESP32 Firmware (.bin)</label>
+                    <div class="file-input-wrapper" id="esp32-drop-zone">
+                        <input type="file" id="esp32-file" accept=".bin" required>
+                        <p>📁 Click or drag and drop your .bin file here</p>
+                        <p class="file-info" id="esp32-file-info"></p>
+                    </div>
+                </div>
+
+                <button type="submit" class="upload-btn">Upload to ESP32</button>
+            </form>
+        </div>
+
+        <div class="note">
+            <strong>Note:</strong> Make sure papilio-prog (for FPGA) and esptool.py (for ESP32) are installed on the server.
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
