@@ -24,6 +24,7 @@ from .database import (
     get_saved_file,
     delete_saved_file,
     update_saved_file_name,
+    update_saved_file_description,
     get_saved_file_path,
     SAVED_FILES_DIR
 )
@@ -417,6 +418,21 @@ async def web_rename_saved_file(
     
     if update_saved_file_name(file_id, new_filename):
         return ApiResponse(success=True, message="File renamed successfully")
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
+
+
+@api.put("/web/saved-files/{file_id}/description")
+async def web_update_saved_file_description(
+    request: Request,
+    file_id: int,
+    new_description: str = Form(...)
+):
+    """Update a saved file's description."""
+    check_web_session(request)
+    
+    if update_saved_file_description(file_id, new_description):
+        return ApiResponse(success=True, message="Description updated successfully")
     else:
         raise HTTPException(status_code=404, detail="File not found")
 

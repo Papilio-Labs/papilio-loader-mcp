@@ -249,3 +249,39 @@ The Papilio Loader MCP Server now has a working HTTP/SSE transport that:
 - ✅ Fully documented with setup guides
 
 The implementation follows best practices from established MCP servers and uses the correct MCP Python SDK APIs for SSE transport.
+## Recent Enhancements (December 2024)
+
+### Web Interface Improvements
+
+**UI/UX Optimization (Space Saving):**
+- Reduced file upload box padding from 40px to 25px for more compact layout
+- Moved COM Port selection to Advanced Options (collapsed by default)
+- Moved "Verify after flashing" checkbox to Advanced Options
+- Moved Status Log higher on page for better visibility
+- Fixed CSS spacing issues between sections (added 20px margin-top to .status-card)
+
+**Saved Files Management:**
+- Added description editing capability for saved files
+- New "📝 Edit Description" button alongside Rename and Delete
+- Description always visible (shows "No description" when empty)
+- Database function: `update_saved_file_description()`
+- API endpoint: `PUT /web/saved-files/{file_id}/description`
+- Client-side inline updates without page reload
+
+**Status Log Improvements:**
+- Fixed paragraph spacing (removed extra margins)
+- Added `:last-child` CSS rule for proper bottom spacing
+- "Clear Log" button for easy log management
+
+### Technical Changes
+
+**Files Modified:**
+- `templates/upload.html` - UI reorganization, new Edit Description button and function
+- `src/papilio_loader_mcp/database.py` - Added `update_saved_file_description()` function
+- `src/papilio_loader_mcp/api.py` - Added PUT endpoint for description updates
+
+**User Experience:**
+- Cleaner, more compact interface with essential controls visible
+- Advanced options hidden by default (ports, verify, addresses)
+- All saved file metadata now editable (filename and description)
+- Better use of vertical space, bringing key features into view

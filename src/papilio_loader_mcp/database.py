@@ -148,6 +148,33 @@ def update_saved_file_name(file_id: int, new_filename: str) -> bool:
     return rows_affected > 0
 
 
+def update_saved_file_description(file_id: int, new_description: str) -> bool:
+    """
+    Update the description of a saved file.
+    
+    Args:
+        file_id: ID of the file to update
+        new_description: New description
+        
+    Returns:
+        True if updated, False if not found
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        UPDATE saved_files
+        SET description = ?
+        WHERE id = ?
+    """, (new_description, file_id))
+    
+    rows_affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return rows_affected > 0
+
+
 def delete_saved_file(file_id: int) -> bool:
     """
     Delete a saved file from database and filesystem.
