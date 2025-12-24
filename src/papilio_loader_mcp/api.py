@@ -23,6 +23,7 @@ from .database import (
     get_saved_files,
     get_saved_file,
     delete_saved_file,
+    update_saved_file_name,
     get_saved_file_path,
     SAVED_FILES_DIR
 )
@@ -360,6 +361,7 @@ async def web_save_file(
     file: UploadFile = File(...),
     device_type: str = Form(...),
     description: str = Form(""),
+    custom_filename: str = Form(""),
 ):
     """Save a file for later use."""
     check_web_session(request)
@@ -374,9 +376,12 @@ async def web_save_file(
             status_code=413, detail=f"File too large (max {config.max_upload_size} bytes)"
         )
     
-    # Generate unique filename
-    import uuid
+    # Use custom filename if provided, otherwise use original
     import os
+    original_filename = custom_filename.strip() if custom_filename.strip() else file.filename
+    
+    # Generate unique filename for storage
+    import uuid
     file_extension = os.path.splitext(file.filename)[1]
     stored_filename = f"{uuid.uuid4()}{file_extension}"
     
@@ -387,7 +392,7 @@ async def web_save_file(
     
     # Add to database
     file_id = add_saved_file(
-        original_filename=file.filename,
+        original_filename=original_filename,
         stored_filename=stored_filename,
         device_type=device_type,
         description=description,
@@ -397,8 +402,23 @@ async def web_save_file(
     return ApiResponse(
         success=True,
         message="File saved successfully",
-        data={"file_id": file_id, "filename": file.filename}
+        data={"file_id": file_id, "filename": original_filename}
     )
+
+
+@api.put("/web/saved-files/{file_id}/rename")
+async def web_rename_saved_file(
+    request: Request,
+    file_id: int,
+    new_filename: str = Form(...)
+):
+    """Rename a saved file."""
+    check_web_session(request)
+    
+    if update_saved_file_name(file_id, new_filename):
+        return ApiResponse(success=True, message="File renamed successfully")
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
 
 
 @api.delete("/web/saved-files/{file_id}")

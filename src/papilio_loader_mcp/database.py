@@ -121,6 +121,33 @@ def get_saved_file(file_id: int) -> Optional[Dict]:
     return dict(row) if row else None
 
 
+def update_saved_file_name(file_id: int, new_filename: str) -> bool:
+    """
+    Update the original filename of a saved file.
+    
+    Args:
+        file_id: ID of the file to rename
+        new_filename: New filename
+        
+    Returns:
+        True if updated, False if not found
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        UPDATE saved_files
+        SET original_filename = ?
+        WHERE id = ?
+    """, (new_filename, file_id))
+    
+    rows_affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return rows_affected > 0
+
+
 def delete_saved_file(file_id: int) -> bool:
     """
     Delete a saved file from database and filesystem.
