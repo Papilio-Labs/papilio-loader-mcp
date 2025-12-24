@@ -45,11 +45,17 @@ async def flash_esp_device(
         cmd = [
             "python",
             "-m", "esptool",
-            "--port", port,
+        ]
+        
+        # Add port parameter only if not AUTO (for auto-detection)
+        if port and port.upper() != "AUTO":
+            cmd.extend(["--port", port])
+        
+        cmd.extend([
             "write-flash",
             address,
             str(file_path_obj)
-        ]
+        ])
         
         # Execute flashing
         proc = await asyncio.create_subprocess_exec(
@@ -65,7 +71,7 @@ async def flash_esp_device(
         return json.dumps({
             "success": proc.returncode == 0,
             "device_type": "esp32",
-            "port": port,
+            "port": port if port.upper() != "AUTO" else "auto-detected",
             "file": str(file_path_obj),
             "address": address,
             "verified": verify,

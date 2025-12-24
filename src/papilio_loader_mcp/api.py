@@ -1,12 +1,15 @@
 """FastAPI REST API for remote network access."""
 
 import os
+import secrets
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Header
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Cookie, Response, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 from .tools.serial_ports import list_serial_ports
 from .tools.device_info import get_device_info
@@ -14,6 +17,7 @@ from .tools.flash_status import get_flash_status
 from .tools.fpga_flash import flash_fpga_device
 from .tools.esp_flash import flash_esp_device
 from .config import get_config
+from .file_detector import validate_file_for_device
 
 # Create FastAPI app
 api = FastAPI(
@@ -24,6 +28,14 @@ api = FastAPI(
 
 # Configure CORS
 config = get_config()
+
+# Add session middleware for web authentication
+api.add_middleware(
+    SessionMiddleware,
+    secret_key=config.session_secret_key,
+    max_age=3600 * 24,  # 24 hours
+)
+
 api.add_middleware(
     CORSMiddleware,
     allow_origins=config.cors_origins,
@@ -148,6 +160,190 @@ async def upload_and_flash(
             temp_file.unlink()
 
 
+# ============================================================================
+# Web Interface Endpoints (Session-based authentication for human users)
+# ============================================================================
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+def check_web_session(request: Request) -> bool:
+    """Check if user is authenticated via web session."""
+    if not request.session.get("authenticated"):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return True
+
+
+@api.get("/web/login", response_class=HTMLResponse)
+async def web_login_page():
+    """Serve the login page."""
+    template_path = Path(__file__).parent.parent.parent / "templates" / "login.html"
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="Login page not found")
+    return HTMLResponse(content=template_path.read_text(encoding='utf-8'), status_code=200)
+
+
+@api.post("/web/login")
+async def web_login(request: Request, login: LoginRequest):
+    """Handle web login."""
+    if login.username == config.web_username and login.password == config.web_password:
+        request.session["authenticated"] = True
+        request.session["username"] = login.username
+        return {"success": True, "message": "Login successful"}
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@api.post("/web/logout")
+async def web_logout(request: Request):
+    """Handle web logout."""
+    request.session.clear()
+    return {"success": True, "message": "Logged out"}
+
+
+@api.get("/web/upload", response_class=HTMLResponse)
+async def web_upload_page(request: Request):
+    """Serve the upload page (requires authentication)."""
+    check_web_session(request)
+    template_path = Path(__file__).parent.parent.parent / "templates" / "upload.html"
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="Upload page not found")
+    return HTMLResponse(content=template_path.read_text(encoding='utf-8'), status_code=200)
+
+
+@api.get("/web/ports")
+async def web_get_ports(request: Request):
+    """Get serial ports (web interface)."""
+    check_web_session(request)
+    result = await list_serial_ports()
+    # list_serial_ports returns JSON string, parse it
+    import json
+    parsed_result = json.loads(result)
+    return {"success": True, "ports": parsed_result.get("ports", [])}
+
+
+@api.post("/web/flash")
+async def web_flash_device(
+    request: Request,
+    port: str = Form(...),
+    device_type: str = Form(...),
+    file: UploadFile = File(...),
+    address: Optional[str] = Form("0x10000"),
+    verify: bool = Form(True),
+    advanced: bool = Form(False),
+):
+    """Flash device via web interface (requires authentication)."""
+    check_web_session(request)
+    
+    # Validate file size
+    contents = await file.read()
+    if len(contents) > config.max_upload_size:
+        raise HTTPException(
+            status_code=413, detail=f"File too large (max {config.max_upload_size} bytes)"
+        )
+    
+    # Validate file type matches intended device (warn but don't block)
+    validation = validate_file_for_device(contents, device_type)
+    file_type_warning = None
+    
+    # Store warning if file type mismatch detected
+    if not validation["valid"]:
+        file_type_warning = {
+            "warning": validation["warning"],
+            "detected_type": validation["detected_type"],
+            "intended_device": device_type,
+            "details": validation["details"]
+        }
+
+    # Save uploaded file temporarily
+    temp_dir = Path("temp")
+    temp_dir.mkdir(exist_ok=True)
+    temp_file = temp_dir / file.filename
+    
+    try:
+        with open(temp_file, "wb") as f:
+            f.write(contents)
+
+        # Flash the device and get command string
+        import json as json_lib
+        
+        if device_type == "fpga":
+            # Get FPGA address from form or use default
+            fpga_address = address if address else "0x100000"
+            result_json = await flash_fpga_device(port, str(temp_file), fpga_address, verify)
+            result = json_lib.loads(result_json)
+            # Build command string for display
+            if port and port.upper() != "AUTO":
+                command = f"python tools/pesptool/pesptool.py --port {port} write-flash {fpga_address} {temp_file.name}"
+            else:
+                command = f"python tools/pesptool/pesptool.py write-flash {fpga_address} {temp_file.name}  # auto-detect port"
+        elif device_type == "esp32":
+            if not address:
+                address = "0x10000"
+            result_json = await flash_esp_device(port, str(temp_file), address, verify)
+            result = json_lib.loads(result_json)
+            # Build command string for display
+            if port and port.upper() != "AUTO":
+                command = f"python -m esptool --port {port} write-flash {address} {temp_file.name}"
+            else:
+                command = f"python -m esptool write-flash {address} {temp_file.name}  # auto-detect port"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid device type")
+
+        if not result.get("success"):
+            # Return error with output for debugging
+            return ApiResponse(
+                success=False,
+                message=result.get("error", "Flash operation failed"),
+                data={
+                    "command": command,
+                    "output": result.get("output", ""),
+                    "error": result.get("error", "Unknown error")
+                }
+            )
+
+        response_data = {
+            "command": command if advanced else None,
+            "output": result.get("output", "") if advanced else None,
+            "result": result
+        }
+        
+        # Include file type warning if present
+        if file_type_warning:
+            response_data["file_type_warning"] = file_type_warning
+        
+        return ApiResponse(
+            success=True,
+            message="Device flashed successfully" + (" (with warning)" if file_type_warning else ""),
+            data=response_data,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        return ApiResponse(
+            success=False,
+            message=str(e),
+            data={"error": str(e), "traceback": traceback.format_exc()}
+        )
+    
+    finally:
+        # Clean up temp file
+        if temp_file.exists():
+            temp_file.unlink()
+
+
+# Redirect root to web interface
+@api.get("/", response_class=HTMLResponse)
+async def root():
+    """Redirect to web login."""
+    return RedirectResponse(url="/web/login")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(api, host=config.bind_address, port=config.port)
+

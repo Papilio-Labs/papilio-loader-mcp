@@ -4,6 +4,7 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 
 ## Features
 
+- **Web Interface**: Modern browser-based UI for manual device flashing by end users (NEW!)
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
 - **REST API**: FastAPI-based HTTP API for remote network access
 - **Dual Programming Tools**: 
@@ -13,16 +14,36 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 - **ESP32 Support**: Flash ESP32 devices with bin/elf files using official esptool, supports multi-partition flashing
 - **Network-based**: Run on Windows with serial port access, control from WSL/Linux over network
 
+## Quick Start
+
+### Web Interface (Recommended for Most Users)
+
+```powershell
+# 1. Install dependencies
+uv pip install -e .
+
+# 2. Start the combined server (MCP + Web Interface)
+.\start.ps1
+
+# 3. Open browser to http://localhost:8000/web/login
+# Default credentials: admin/admin
+```
+
+See [WEB_INTERFACE_GUIDE.md](WEB_INTERFACE_GUIDE.md) for detailed instructions.
+
 ## Architecture
 
 ```
 ┌─────────────────┐         Network          ┌──────────────────┐
-│   WSL / Linux   │ ◄────────────────────► │  Windows Host    │
-│  Build Machine  │      HTTP/MCP           │   MCP Server     │
-│                 │                         │                  │
-│ - Build FPGA    │                         │ - pyserial       │
-│ - Build ESP32   │                         │ - esptool (ESP32)│
-│ - Send files    │                         │ - pesptool (FPGA)│
+│   Web Browser   │ ◄────────────────────► │  Windows Host    │
+│  WSL / Linux    │      HTTP/MCP           │ Combined Server  │
+│  Build Machine  │                         │                  │
+│ - Manual Upload │                         │ - Web UI         │
+│ - Build FPGA    │                         │ - MCP Server     │
+│ - Build ESP32   │                         │ - REST API       │
+│ - Send files    │                         │ - pyserial       │
+│                 │                         │ - esptool (ESP32)│
+│                 │                         │ - pesptool (FPGA)│
 └─────────────────┘                         └────────┬─────────┘
                                                      │ USB/Serial
                                                      ▼

@@ -5,13 +5,14 @@ import asyncio
 from pathlib import Path
 
 
-async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> str:
+async def flash_fpga_device(port: str, file_path: str, address: str = "0x100000", verify: bool = True) -> str:
     """
     Flash a Papilio board with Gowin FPGA using pesptool.
     
     Args:
         port: Serial port
         file_path: Path to .bin file (Gowin FPGA bitstream)
+        address: Flash address in hex (default: "0x100000" for FPGA bitstreams)
         verify: Whether to verify after flashing
     
     Returns:
@@ -44,15 +45,21 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
             }, indent=2)
         
         # Build command for FPGA flashing
-        # FPGA bitstreams go to external flash at 0x100000 (1MB offset)
+        # FPGA bitstreams go to external flash at 0x100000 (1MB offset) by default
         cmd = [
             "python",
             str(pesptool_path),
-            "--port", port,
-            "write-flash",
-            "0x100000",  # FPGA bitstreams go to 1MB offset in external flash
-            str(file_path_obj)
         ]
+        
+        # Add port parameter only if not AUTO (for auto-detection)
+        if port and port.upper() != "AUTO":
+            cmd.extend(["--port", port])
+        
+        cmd.extend([
+            "write-flash",
+            address if address else "0x100000",
+            str(file_path_obj)
+        ])
         
         # Note: pesptool write-flash doesn't support --verify flag
         # Verification would need to be done separately with read-flash
@@ -71,8 +78,9 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
         return json.dumps({
             "success": proc.returncode == 0,
             "device_type": "fpga",
-            "port": port,
+            "port": port if port.upper() != "AUTO" else "auto-detected",
             "file": str(file_path_obj),
+            "address": address,
             "verified": verify,
             "output": output,
             "tool": "pesptool (GadgetFactory esptool fork)"

@@ -15,6 +15,11 @@ class Config(BaseSettings):
     # Security settings
     api_key: str | None = None  # Set via environment variable for API authentication
     cors_origins: List[str] = ["*"]  # CORS allowed origins
+    
+    # Web interface authentication
+    web_username: str = "admin"  # Web interface username
+    web_password: str = "admin"  # Web interface password (change in production!)
+    session_secret_key: str = "change-this-secret-key-in-production"  # For session encryption
 
     # Rate limiting (requests per minute)
     rate_limit: int = 60
