@@ -4,6 +4,9 @@ import json
 import asyncio
 from pathlib import Path
 
+# esptool is used as a subprocess module, not imported directly
+# This ensures we use the command-line interface
+
 
 async def flash_esp_device(
     port: str, file_path: str, address: str, verify: bool = True
@@ -37,27 +40,16 @@ async def flash_esp_device(
         }, indent=2)
     
     try:
-        # Use official esptool module (installed via pip)
-        try:
-            import esptool
-        except ImportError:
-            return json.dumps({
-                "success": False,
-                "error": "esptool module not found. Install with: pip install esptool"
-            }, indent=2)
-        
-        # Build flash command for ESP32 (using esptool as module)
+        # Build flash command for ESP32 (using esptool as subprocess module)
+        # Note: esptool doesn't support --verify flag, verification happens automatically
         cmd = [
             "python",
             "-m", "esptool",
             "--port", port,
-            "write-flash",  # Use non-deprecated command name
+            "write-flash",
             address,
             str(file_path_obj)
         ]
-        
-        if verify:
-            cmd.insert(5, "--verify")
         
         # Execute flashing
         proc = await asyncio.create_subprocess_exec(
@@ -102,16 +94,7 @@ async def flash_esp_multi_partition(
         JSON string with flashing results
     """
     try:
-        # Use official esptool module (installed via pip)
-        try:
-            import esptool
-        except ImportError:
-            return json.dumps({
-                "success": False,
-                "error": "esptool module not found. Install with: pip install esptool"
-            }, indent=2)
-        
-        # Build multi-partition flash command (using esptool as module)
+        # Build multi-partition flash command (using esptool as subprocess module)
         cmd = [
             "python",
             "-m", "esptool",

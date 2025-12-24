@@ -45,7 +45,6 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
         
         # Build command for FPGA flashing
         # FPGA bitstreams go to external flash at 0x100000 (1MB offset)
-        # Use write-flash (not deprecated write_flash)
         cmd = [
             "python",
             str(pesptool_path),
@@ -55,8 +54,8 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
             str(file_path_obj)
         ]
         
-        if verify:
-            cmd.insert(4, "--verify")
+        # Note: pesptool write-flash doesn't support --verify flag
+        # Verification would need to be done separately with read-flash
         
         # Execute flashing
         proc = await asyncio.create_subprocess_exec(

@@ -11,6 +11,8 @@ dependencies = [
     "pyserial>=3.5",
     "uvicorn>=0.40.0",
     "python-multipart>=0.0.21",
+    "starlette>=0.41.0",
+    "sse-starlette>=2.3.0",
 ]
 
 [project.scripts]

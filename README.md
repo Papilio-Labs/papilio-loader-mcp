@@ -83,6 +83,69 @@ PAPILIO_SERIAL_TIMEOUT=10
 
 ## Usage
 
+### As Standalone HTTP/SSE Server (Recommended for Remote Access)
+
+The HTTP/SSE server runs as a standalone Windows process and allows VS Code (or other MCP clients) to connect over HTTP with Server-Sent Events (SSE) transport.
+
+**Benefits:**
+- No need for VS Code to spawn the server process
+- Server runs continuously, independent of VS Code
+- Can be set up as a Windows service
+- Multiple clients can connect to the same server instance
+- Better for remote/network access scenarios
+
+**Start the server:**
+
+```bash
+# Using the startup script
+python start_mcp_server.py
+
+# Or run the module directly
+python -m papilio_loader_mcp.http_server --port 8765
+
+# Or with custom host/port
+python -m papilio_loader_mcp.http_server --host 0.0.0.0 --port 8765
+```
+
+The server will start on `http://127.0.0.1:8765` with the SSE endpoint at `/sse`.
+
+**Configure VS Code:**
+
+Update `.vscode/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "papilio-loader": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8765/sse"
+    }
+  }
+}
+```
+
+For network access from other machines, use `"url": "http://YOUR_WINDOWS_IP:8765/sse"`.
+
+**Set up as Windows Service (Optional):**
+
+To run the server automatically on Windows startup, you can use NSSM (Non-Sucking Service Manager) or Task Scheduler:
+
+```powershell
+# Download NSSM from https://nssm.cc/download
+nssm install PapilioMCP "C:\Python314\python.exe" "C:\development\papilio-loader-mcp\start_mcp_server.py"
+nssm start PapilioMCP
+```
+
+### As MCP Server (GitHub Copilot in VS Code - stdio mode)
+
+This project is pre-configured for GitHub Copilot MCP integration. After installation:
+
+1. Reload VS Code window (`Ctrl+Shift+P` → "Developer: Reload Window")
+2. Open GitHub Copilot Chat
+3. The MCP tools will be available automatically
+
+See [VSCODE_SETUP.md](VSCODE_SETUP.md) for detailed setup instructions.
+
 ### As MCP Server (Claude Desktop)
 
 1. Add to your Claude Desktop configuration:
