@@ -5,6 +5,7 @@ description = "MCP server for loading FPGA bit files and ESP32 firmware over net
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "esptool>=4.8.1",
     "fastapi>=0.127.0",
     "mcp>=1.25.0",
     "pyserial>=3.5",

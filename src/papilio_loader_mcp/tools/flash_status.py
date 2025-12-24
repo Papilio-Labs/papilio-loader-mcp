@@ -27,7 +27,7 @@ async def get_flash_status(port: str, device_type: str) -> str:
 async def _get_fpga_flash_status(port: str) -> str:
     """Get Papilio FPGA flash status using pesptool."""
     try:
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
         # Run flash_id command to get flash information
         proc = await asyncio.create_subprocess_exec(
@@ -68,7 +68,7 @@ async def _get_fpga_flash_status(port: str) -> str:
 async def _get_esp32_flash_status(port: str) -> str:
     """Get ESP32 flash status."""
     try:
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
         # Run flash_id command to get flash information
         proc = await asyncio.create_subprocess_exec(

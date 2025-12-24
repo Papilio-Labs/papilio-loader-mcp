@@ -1,0 +1,6 @@
+{
+  "preferences": {
+    "testScriptLocation": "debugging",
+    "defaultComPort": "COM4"
+  }
+}

@@ -35,22 +35,23 @@ async def flash_fpga_device(port: str, file_path: str, verify: bool = True) -> s
     
     try:
         # Use pesptool from the tools/pesptool directory
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
         if not pesptool_path.exists():
             return json.dumps({
                 "success": False,
-                "error": "pesptool (esptool.py) not found in tools/pesptool directory"
+                "error": f"pesptool not found at: {pesptool_path}"
             }, indent=2)
         
         # Build command for FPGA flashing
-        # pesptool uses write_flash command with FPGA-specific addressing
+        # FPGA bitstreams go to external flash at 0x100000 (1MB offset)
+        # Use write-flash (not deprecated write_flash)
         cmd = [
             "python",
             str(pesptool_path),
             "--port", port,
-            "write_flash",
-            "0x0",  # FPGA bitstreams typically start at 0x0
+            "write-flash",
+            "0x100000",  # FPGA bitstreams go to 1MB offset in external flash
             str(file_path_obj)
         ]
         

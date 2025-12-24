@@ -6,9 +6,11 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
 - **REST API**: FastAPI-based HTTP API for remote network access
-- **Unified Programming Tool**: Uses pesptool (GadgetFactory's esptool fork) for both FPGA and ESP32 programming
+- **Dual Programming Tools**: 
+  - Official esptool for ESP32 programming (safe and stable)
+  - pesptool (GadgetFactory fork) for FPGA programming only
 - **Gowin FPGA Support**: Flash Papilio boards (Gowin FPGA) with .bin files via pesptool
-- **ESP32 Support**: Flash ESP32 devices with bin/elf files, supports multi-partition flashing
+- **ESP32 Support**: Flash ESP32 devices with bin/elf files using official esptool, supports multi-partition flashing
 - **Network-based**: Run on Windows with serial port access, control from WSL/Linux over network
 
 ## Architecture
@@ -19,8 +21,8 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 │  Build Machine  │      HTTP/MCP           │   MCP Server     │
 │                 │                         │                  │
 │ - Build FPGA    │                         │ - pyserial       │
-│ - Build ESP32   │                         │ - pesptool       │
-│ - Send files    │                         │   (unified tool) │
+│ - Build ESP32   │                         │ - esptool (ESP32)│
+│ - Send files    │                         │ - pesptool (FPGA)│
 └─────────────────┘                         └────────┬─────────┘
                                                      │ USB/Serial
                                                      ▼
@@ -35,9 +37,10 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 ### Prerequisites
 
 1. **Python 3.12+**: Required for running the server
-2. **pesptool**: Included as git submodule (GadgetFactory's esptool fork)
-   - Unified tool for programming both Papilio FPGA and ESP32 devices
-   - No additional tools needed - pesptool handles everything!
+2. **esptool**: Official Espressif tool for ESP32 programming (installed automatically via pip)
+3. **pesptool**: GadgetFactory's fork for FPGA programming (included as git submodule)
+   - Used ONLY for programming FPGA bitstreams to external flash
+   - ESP32 uses official esptool for safety and stability
 
 ### Setup
 

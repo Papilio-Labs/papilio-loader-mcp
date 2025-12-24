@@ -1,5 +1,5 @@
 # All Python dependencies are managed in pyproject.toml
 # Install with: uv pip install -e .
 #
-# pesptool (GadgetFactory esptool fork) is included as a git submodule
-# It handles both Papilio FPGA and ESP32 programming - no external tools needed!
+# esptool (official) is used for ESP32 programming (safe and stable)
+# pesptool (GadgetFactory fork) is used for FPGA programming via tools/pesptool submodule

@@ -27,7 +27,7 @@ async def get_device_info(port: str, device_type: str) -> str:
 async def _get_fpga_info(port: str) -> str:
     """Get Papilio FPGA device information using pesptool."""
     try:
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
         # Use flash_id to detect device
         proc = await asyncio.create_subprocess_exec(
@@ -70,7 +70,7 @@ async def _get_esp32_info(port: str) -> str:
     """Get ESP32 device information using esptool."""
     try:
         # Use pesptool from the tools/pesptool directory
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
+        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
         # Run chip_id command
         proc = await asyncio.create_subprocess_exec(

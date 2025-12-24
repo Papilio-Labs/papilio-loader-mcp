@@ -1,4 +1,4 @@
-"""ESP32 flashing using pesptool (esptool fork)."""
+"""ESP32 flashing using official esptool (safe and stable)."""
 
 import json
 import asyncio
@@ -9,7 +9,7 @@ async def flash_esp_device(
     port: str, file_path: str, address: str, verify: bool = True
 ) -> str:
     """
-    Flash an ESP32 device with firmware.
+    Flash an ESP32 device with firmware using official esptool.
     
     Args:
         port: Serial port
@@ -37,27 +37,27 @@ async def flash_esp_device(
         }, indent=2)
     
     try:
-        # Locate pesptool
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
-        
-        if not pesptool_path.exists():
+        # Use official esptool module (installed via pip)
+        try:
+            import esptool
+        except ImportError:
             return json.dumps({
                 "success": False,
-                "error": "pesptool (esptool.py) not found in tools/pesptool directory"
+                "error": "esptool module not found. Install with: pip install esptool"
             }, indent=2)
         
-        # Build flash command
+        # Build flash command for ESP32 (using esptool as module)
         cmd = [
             "python",
-            str(pesptool_path),
+            "-m", "esptool",
             "--port", port,
-            "write_flash",
+            "write-flash",  # Use non-deprecated command name
             address,
             str(file_path_obj)
         ]
         
         if verify:
-            cmd.insert(4, "--verify")
+            cmd.insert(5, "--verify")
         
         # Execute flashing
         proc = await asyncio.create_subprocess_exec(
@@ -91,7 +91,7 @@ async def flash_esp_multi_partition(
     port: str, partitions: list[tuple[str, str]], verify: bool = True
 ) -> str:
     """
-    Flash multiple partitions to ESP32.
+    Flash multiple partitions to ESP32 using official esptool.
     
     Args:
         port: Serial port
@@ -102,20 +102,21 @@ async def flash_esp_multi_partition(
         JSON string with flashing results
     """
     try:
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "esptool.py"
-        
-        if not pesptool_path.exists():
+        # Use official esptool module (installed via pip)
+        try:
+            import esptool
+        except ImportError:
             return json.dumps({
                 "success": False,
-                "error": "pesptool (esptool.py) not found"
+                "error": "esptool module not found. Install with: pip install esptool"
             }, indent=2)
         
-        # Build multi-partition flash command
+        # Build multi-partition flash command (using esptool as module)
         cmd = [
             "python",
-            str(pesptool_path),
+            "-m", "esptool",
             "--port", port,
-            "write_flash"
+            "write-flash",  # Use non-deprecated command name
         ]
         
         if verify:
