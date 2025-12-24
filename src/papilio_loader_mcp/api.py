@@ -18,6 +18,14 @@ from .tools.fpga_flash import flash_fpga_device
 from .tools.esp_flash import flash_esp_device
 from .config import get_config
 from .file_detector import validate_file_for_device
+from .database import (
+    add_saved_file,
+    get_saved_files,
+    get_saved_file,
+    delete_saved_file,
+    get_saved_file_path,
+    SAVED_FILES_DIR
+)
 
 # Create FastAPI app
 api = FastAPI(
@@ -334,6 +342,95 @@ async def web_flash_device(
         # Clean up temp file
         if temp_file.exists():
             temp_file.unlink()
+
+
+# Saved Files Management Endpoints
+@api.get("/web/saved-files")
+async def web_get_saved_files(request: Request, device_type: Optional[str] = None):
+    """Get list of saved files."""
+    check_web_session(request)
+    
+    files = get_saved_files(device_type)
+    return {"success": True, "files": files}
+
+
+@api.post("/web/save-file")
+async def web_save_file(
+    request: Request,
+    file: UploadFile = File(...),
+    device_type: str = Form(...),
+    description: str = Form(""),
+):
+    """Save a file for later use."""
+    check_web_session(request)
+    
+    # Read file content
+    contents = await file.read()
+    file_size = len(contents)
+    
+    # Validate file size
+    if file_size > config.max_upload_size:
+        raise HTTPException(
+            status_code=413, detail=f"File too large (max {config.max_upload_size} bytes)"
+        )
+    
+    # Generate unique filename
+    import uuid
+    import os
+    file_extension = os.path.splitext(file.filename)[1]
+    stored_filename = f"{uuid.uuid4()}{file_extension}"
+    
+    # Save file to disk
+    file_path = SAVED_FILES_DIR / stored_filename
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    # Add to database
+    file_id = add_saved_file(
+        original_filename=file.filename,
+        stored_filename=stored_filename,
+        device_type=device_type,
+        description=description,
+        file_size=file_size
+    )
+    
+    return ApiResponse(
+        success=True,
+        message="File saved successfully",
+        data={"file_id": file_id, "filename": file.filename}
+    )
+
+
+@api.delete("/web/saved-files/{file_id}")
+async def web_delete_saved_file(request: Request, file_id: int):
+    """Delete a saved file."""
+    check_web_session(request)
+    
+    if delete_saved_file(file_id):
+        return ApiResponse(success=True, message="File deleted successfully")
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
+
+
+@api.get("/web/saved-files/{file_id}/download")
+async def web_download_saved_file(request: Request, file_id: int):
+    """Download a saved file."""
+    check_web_session(request)
+    
+    file_info = get_saved_file(file_id)
+    if not file_info:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file_path = get_saved_file_path(file_id)
+    if not file_path or not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    from starlette.responses import FileResponse
+    return FileResponse(
+        path=file_path,
+        filename=file_info['original_filename'],
+        media_type='application/octet-stream'
+    )
 
 
 # Redirect root to web interface

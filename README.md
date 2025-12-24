@@ -5,6 +5,7 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 ## Features
 
 - **Web Interface**: Modern browser-based UI for manual device flashing by end users (NEW!)
+  - **Saved Files Library**: Save frequently-used firmware files with descriptions for easy reuse (NEW!)
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
 - **REST API**: FastAPI-based HTTP API for remote network access
 - **Dual Programming Tools**: 

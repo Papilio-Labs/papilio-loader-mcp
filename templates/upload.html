@@ -306,6 +306,206 @@
         .advanced-section.collapsed {
             max-height: 0;
         }
+        
+        /* Saved Files Styles */
+        .saved-files-toggle {
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            transition: all 0.2s;
+        }
+        
+        .saved-files-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.3);
+        }
+        
+        .saved-files-toggle::after {
+            content: '▼';
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+        
+        .saved-files-toggle.collapsed::after {
+            transform: rotate(-90deg);
+        }
+        
+        .saved-files-section {
+            max-height: 600px;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        
+        .saved-files-section.collapsed {
+            max-height: 0;
+        }
+        
+        .saved-files-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .saved-files-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .saved-file-item {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        
+        .saved-file-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+        
+        .saved-file-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .saved-file-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .saved-file-type {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .saved-file-type.fpga {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .saved-file-type.esp32 {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .saved-file-description {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 8px;
+            font-style: italic;
+        }
+        
+        .saved-file-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 10px;
+        }
+        
+        .saved-file-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .saved-file-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .load-btn {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .load-btn:hover {
+            background: #45a049;
+        }
+        
+        .delete-btn {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .delete-btn:hover {
+            background: #ee5a5a;
+        }
+        
+        .save-file-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #f0f4ff;
+            border-radius: 8px;
+        }
+        
+        .save-file-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .save-description {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 8px;
+            display: none;
+        }
+        
+        .save-description.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -344,6 +544,12 @@
                         <input type="checkbox" id="fpgaVerify" checked>
                         <label for="fpgaVerify">Verify after flashing</label>
                     </div>
+                    
+                    <div class="save-file-checkbox">
+                        <input type="checkbox" id="fpgaSaveFile" onchange="toggleSaveDescription('fpga')">
+                        <label for="fpgaSaveFile">💾 Save this file to library</label>
+                    </div>
+                    <input type="text" id="fpgaSaveDescription" class="save-description" placeholder="Description (e.g., 'Arcade Template v1.2')">
                     
                     <button type="button" class="advanced-toggle collapsed" onclick="toggleAdvanced('fpga')">
                         ⚙️ Advanced Options
@@ -395,6 +601,12 @@
                         <label for="esp32Verify">Verify after flashing</label>
                     </div>
                     
+                    <div class="save-file-checkbox">
+                        <input type="checkbox" id="esp32SaveFile" onchange="toggleSaveDescription('esp32')">
+                        <label for="esp32SaveFile">💾 Save this file to library</label>
+                    </div>
+                    <input type="text" id="esp32SaveDescription" class="save-description" placeholder="Description (e.g., 'Main Firmware v2.1')">
+                    
                     <button type="button" class="advanced-toggle collapsed" onclick="toggleAdvanced('esp32')">
                         ⚙️ Advanced Options
                     </button>
@@ -417,6 +629,25 @@
             </div>
         </div>
         
+        <!-- Saved Files Section -->
+        <div class="status-card">
+            <button type="button" class="saved-files-toggle collapsed" onclick="toggleSavedFiles()">
+                💾 Saved Files Library
+            </button>
+            
+            <div id="savedFilesSection" class="saved-files-section collapsed">
+                <div class="saved-files-tabs">
+                    <button class="tab-btn active" onclick="switchTab('all')">All Files</button>
+                    <button class="tab-btn" onclick="switchTab('fpga')">FPGA</button>
+                    <button class="tab-btn" onclick="switchTab('esp32')">ESP32</button>
+                </div>
+                
+                <div id="savedFilesList" class="saved-files-list">
+                    <p class="info">Loading saved files...</p>
+                </div>
+            </div>
+        </div>
+        
         <!-- Status Log -->
         <div class="status-card">
             <h2>📊 Status Log</h2>
@@ -427,8 +658,11 @@
     </div>
 
     <script>
+        let currentTab = 'all';
+        
         // Load ports on page load
         loadPorts();
+        loadSavedFiles();
         
         // Setup file name displays and file type checking
         document.getElementById('fpgaFile').addEventListener('change', function(e) {
@@ -472,6 +706,239 @@
                 reader.onerror = reject;
                 reader.readAsArrayBuffer(file.slice(0, 32)); // Read first 32 bytes
             });
+        }
+        
+        async function checkFileType(deviceType) {
+            const fileInput = document.getElementById(`${deviceType}File`);
+            const warningId = `${deviceType}Warning`;
+            
+            // Remove any existing warning
+            let warningDiv = document.getElementById(warningId);
+            if (warningDiv) {
+                warningDiv.remove();
+            }
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const detectedType = await detectBinaryType(file);
+            
+            // Check for mismatch
+            if (detectedType !== 'unknown' && detectedType !== deviceType) {
+                // Create warning element
+                warningDiv = document.createElement('div');
+                warningDiv.id = warningId;
+                warningDiv.style.cssText = 'background-color: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 12px; margin: 10px 0; color: #856404;';
+                warningDiv.innerHTML = `
+                    <strong>⚠️ FILE TYPE MISMATCH WARNING</strong><br>
+                    Detected: <strong>${detectedType.toUpperCase()}</strong> firmware<br>
+                    Selected device: <strong>${deviceType.toUpperCase()}</strong><br>
+                    <em style="font-size: 12px;">You can still flash, but this may damage your device!</em>
+                `;
+                
+                // Insert after the file input's parent form-group
+                const formGroup = fileInput.closest('.form-group');
+                formGroup.parentNode.insertBefore(warningDiv, formGroup.nextSibling);
+            }
+        }
+        
+        // Saved Files Management
+        function toggleSavedFiles() {
+            const section = document.getElementById('savedFilesSection');
+            const button = event.target;
+            
+            section.classList.toggle('collapsed');
+            button.classList.toggle('collapsed');
+            
+            if (!section.classList.contains('collapsed')) {
+                loadSavedFiles();
+            }
+        }
+        
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Reload files with filter
+            loadSavedFiles();
+        }
+        
+        function toggleSaveDescription(deviceType) {
+            const checkbox = document.getElementById(`${deviceType}SaveFile`);
+            const descInput = document.getElementById(`${deviceType}SaveDescription`);
+            
+            if (checkbox.checked) {
+                descInput.classList.add('show');
+            } else {
+                descInput.classList.remove('show');
+            }
+        }
+        
+        async function loadSavedFiles() {
+            try {
+                const deviceFilter = currentTab === 'all' ? '' : currentTab;
+                const url = deviceFilter ? `/web/saved-files?device_type=${deviceFilter}` : '/web/saved-files';
+                
+                const response = await fetch(url, {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load saved files');
+                }
+                
+                const data = await response.json();
+                const files = data.files || [];
+                
+                const listDiv = document.getElementById('savedFilesList');
+                
+                if (files.length === 0) {
+                    listDiv.innerHTML = '<p class="info">No saved files yet. Use "💾 Save this file to library" when flashing.</p>';
+                    return;
+                }
+                
+                listDiv.innerHTML = files.map(file => `
+                    <div class="saved-file-item">
+                        <div class="saved-file-header">
+                            <span class="saved-file-name">📄 ${file.original_filename}</span>
+                            <span class="saved-file-type ${file.device_type}">${file.device_type}</span>
+                        </div>
+                        ${file.description ? `<div class="saved-file-description">"${file.description}"</div>` : ''}
+                        <div class="saved-file-meta">
+                            <span>${formatFileSize(file.file_size)}</span>
+                            <span>${formatDate(file.created_at)}</span>
+                        </div>
+                        <div class="saved-file-actions">
+                            <button class="saved-file-btn load-btn" onclick="loadSavedFile(${file.id}, '${file.device_type}', '${file.original_filename}')">
+                                📥 Load
+                            </button>
+                            <button class="saved-file-btn delete-btn" onclick="deleteSavedFile(${file.id})">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Error loading saved files:', error);
+                document.getElementById('savedFilesList').innerHTML = '<p class="error">Error loading saved files.</p>';
+            }
+        }
+        
+        async function loadSavedFile(fileId, deviceType, filename) {
+            try {
+                addLog(`Loading saved file: ${filename}`, 'info');
+                
+                // Download the file
+                const response = await fetch(`/web/saved-files/${fileId}/download`, {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to download file');
+                }
+                
+                const blob = await response.blob();
+                const file = new File([blob], filename);
+                
+                // Create a DataTransfer to set the file input
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                
+                // Set the file input
+                const fileInput = document.getElementById(`${deviceType}File`);
+                fileInput.files = dataTransfer.files;
+                
+                // Update the filename display
+                document.getElementById(`${deviceType}FileName`).textContent = filename;
+                
+                // Run file type check
+                await checkFileType(deviceType);
+                
+                addLog(`✓ Loaded: ${filename}`, 'success');
+                
+            } catch (error) {
+                addLog(`Error loading file: ${error.message}`, 'error');
+                console.error('Error loading saved file:', error);
+            }
+        }
+        
+        async function deleteSavedFile(fileId) {
+            if (!confirm('Are you sure you want to delete this saved file?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/web/saved-files/${fileId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to delete file');
+                }
+                
+                addLog('File deleted from library', 'success');
+                loadSavedFiles();
+                
+            } catch (error) {
+                addLog(`Error deleting file: ${error.message}`, 'error');
+                console.error('Error deleting saved file:', error);
+            }
+        }
+        
+        async function saveFileToLibrary(deviceType, file, description) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('device_type', deviceType);
+                formData.append('description', description);
+                
+                const response = await fetch('/web/save-file', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog(`✓ Saved "${file.name}" to library`, 'success');
+                } else {
+                    addLog(`Failed to save file: ${data.message}`, 'error');
+                }
+                
+            } catch (error) {
+                addLog(`Error saving file: ${error.message}`, 'error');
+                console.error('Error saving file:', error);
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} min ago`;
+            if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+            
+            return date.toLocaleDateString();
         }
         
         async function checkFileType(deviceType) {
@@ -569,6 +1036,8 @@
             const fileInput = document.getElementById(`${deviceType}File`);
             const verify = document.getElementById(`${deviceType}Verify`).checked;
             const advanced = document.getElementById(`${deviceType}ShowOutput`)?.checked || false;
+            const saveFile = document.getElementById(`${deviceType}SaveFile`).checked;
+            const saveDescription = document.getElementById(`${deviceType}SaveDescription`).value;
             const button = event.target.querySelector('.flash-btn');
             
             if (!fileInput.files[0]) {
@@ -576,11 +1045,18 @@
                 return;
             }
             
+            const file = fileInput.files[0];
+            
+            // Save file to library if requested (do this BEFORE flashing)
+            if (saveFile) {
+                await saveFileToLibrary(deviceType, file, saveDescription);
+            }
+            
             button.disabled = true;
             button.textContent = '⏳ Flashing...';
             
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
             formData.append('port', port);
             formData.append('device_type', deviceType);
             formData.append('verify', verify);

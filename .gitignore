@@ -46,6 +46,10 @@ env/
 temp/*
 !temp/.gitkeep
 
+# Saved files and database
+saved_files/
+saved_files.db
+
 # Logs
 logs/*
 !logs/.gitkeep
