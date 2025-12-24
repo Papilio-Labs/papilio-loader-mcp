@@ -197,6 +197,30 @@
             font-size: 20px;
         }
         
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .clear-log-btn {
+            padding: 8px 16px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .clear-log-btn:hover {
+            background: #ee5a5a;
+            transform: translateY(-1px);
+        }
+        
         .status-log {
             background: #f8f9fa;
             border-radius: 8px;
@@ -675,7 +699,10 @@
         
         <!-- Status Log -->
         <div class="status-card">
-            <h2>📊 Status Log</h2>
+            <div class="status-header">
+                <h2>📊 Status Log</h2>
+                <button class="clear-log-btn" onclick="clearLog()">🗑️ Clear Log</button>
+            </div>
             <div class="status-log" id="statusLog">
                 <p class="info">Ready to flash devices...</p>
             </div>
@@ -1216,6 +1243,11 @@
             p.textContent = `[${timestamp}] ${message}`;
             log.appendChild(p);
             log.scrollTop = log.scrollHeight;
+        }
+        
+        function clearLog() {
+            const log = document.getElementById('statusLog');
+            log.innerHTML = '<p class="info">Log cleared. Ready to flash devices...</p>';
         }
         
         async function logout() {
