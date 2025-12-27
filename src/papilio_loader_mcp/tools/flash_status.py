@@ -29,12 +29,21 @@ async def _get_fpga_flash_status(port: str) -> str:
     try:
         pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
-        # Run flash_id command to get flash information
-        proc = await asyncio.create_subprocess_exec(
+        # Build command
+        cmd = [
             "python",
             str(pesptool_path),
-            "--port", port,
-            "flash_id",
+        ]
+        
+        # Add port parameter only if not AUTO (for auto-detection)
+        if port and port.upper() != "AUTO":
+            cmd.extend(["--port", port])
+        
+        cmd.append("flash_id")
+        
+        # Run flash_id command to get flash information
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -70,12 +79,21 @@ async def _get_esp32_flash_status(port: str) -> str:
     try:
         pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
         
-        # Run flash_id command to get flash information
-        proc = await asyncio.create_subprocess_exec(
+        # Build command
+        cmd = [
             "python",
             str(pesptool_path),
-            "--port", port,
-            "flash_id",
+        ]
+        
+        # Add port parameter only if not AUTO (for auto-detection)
+        if port and port.upper() != "AUTO":
+            cmd.extend(["--port", port])
+        
+        cmd.append("flash_id")
+        
+        # Run flash_id command to get flash information
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )

@@ -61,22 +61,25 @@ def run_combined_server(host: str = "0.0.0.0", port: int = 8000):
     """Run the combined MCP + Web server."""
     config = get_config()
     
+    # Display localhost for user-friendly URLs when binding to all interfaces
+    display_host = "localhost" if host == "0.0.0.0" else host
+    
     logger.info("=" * 70)
     logger.info("🚀 Starting Papilio Loader Combined Server")
     logger.info("=" * 70)
-    logger.info(f"Server running on: http://{host}:{port}")
+    logger.info(f"Server running on: http://{display_host}:{port}")
     logger.info("")
     logger.info("📱 Web Interface:")
-    logger.info(f"   Login: http://{host}:{port}/web/login")
+    logger.info(f"   Login: http://{display_host}:{port}/web/login")
     logger.info(f"   Username: {config.web_username}")
     logger.info(f"   Password: {config.web_password}")
     logger.info("")
     logger.info("🔌 MCP Interface (for AI assistants):")
-    logger.info(f"   SSE endpoint: http://{host}:{port}/sse")
+    logger.info(f"   SSE endpoint: http://{display_host}:{port}/sse")
     logger.info("")
     logger.info("🔧 REST API:")
-    logger.info(f"   Documentation: http://{host}:{port}/docs")
-    logger.info(f"   Health Check: http://{host}:{port}/health")
+    logger.info(f"   Documentation: http://{display_host}:{port}/docs")
+    logger.info(f"   Health Check: http://{display_host}:{port}/health")
     logger.info(f"   API Key: {'Enabled' if config.api_key else 'Disabled'}")
     logger.info("=" * 70)
     

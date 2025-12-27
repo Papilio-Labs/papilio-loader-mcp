@@ -13,6 +13,7 @@ from .tools.device_info import get_device_info
 from .tools.flash_status import get_flash_status
 from .tools.fpga_flash import flash_fpga_device
 from .tools.esp_flash import flash_esp_device
+from .file_detector import validate_file_for_device
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,13 +37,13 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_device_info",
-            description="Get information about a connected device on a specific port",
+            description="Get information about a connected device. Port will be auto-detected if not provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "port": {
                         "type": "string",
-                        "description": "COM port (e.g., COM3 on Windows, /dev/ttyUSB0 on Linux)",
+                        "description": "COM port (e.g., COM3 on Windows, /dev/ttyUSB0 on Linux). If not provided, will auto-detect.",
                     },
                     "device_type": {
                         "type": "string",
@@ -50,18 +51,18 @@ async def list_tools() -> list[Tool]:
                         "description": "Type of device to query",
                     },
                 },
-                "required": ["port", "device_type"],
+                "required": ["device_type"],
             },
         ),
         Tool(
             name="get_flash_status",
-            description="Get flash status and memory information for a device",
+            description="Get flash status and memory information for a device. Port will be auto-detected if not provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "port": {
                         "type": "string",
-                        "description": "COM port",
+                        "description": "COM port. If not provided, will auto-detect.",
                     },
                     "device_type": {
                         "type": "string",
@@ -69,18 +70,18 @@ async def list_tools() -> list[Tool]:
                         "description": "Type of device",
                     },
                 },
-                "required": ["port", "device_type"],
+                "required": ["device_type"],
             },
         ),
         Tool(
             name="flash_device",
-            description="Flash a device with firmware. Supports Gowin FPGA .bin files and ESP32 firmware (.bin/.elf)",
+            description="Flash a device with firmware. Supports Gowin FPGA .bin files and ESP32 firmware (.bin/.elf). Port will be auto-detected if not provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "port": {
                         "type": "string",
-                        "description": "COM port",
+                        "description": "COM port. If not provided, will auto-detect.",
                     },
                     "device_type": {
                         "type": "string",
@@ -93,15 +94,20 @@ async def list_tools() -> list[Tool]:
                     },
                     "address": {
                         "type": "string",
-                        "description": "Flash address in hex (e.g., 0x1000). Optional for FPGA, required for ESP32",
+                        "description": "Flash address in hex (e.g., 0x1000). If not provided, defaults to 0x10000 for ESP32 and 0x100000 for FPGA",
                     },
                     "verify": {
                         "type": "boolean",
                         "description": "Verify after flashing (default: true)",
                         "default": True,
                     },
+                    "force": {
+                        "type": "boolean",
+                        "description": "Force flashing even if file type validation fails (default: false)",
+                        "default": False,
+                    },
                 },
-                "required": ["port", "device_type", "file_path"],
+                "required": ["device_type", "file_path"],
             },
         ),
     ]
@@ -116,34 +122,52 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(type="text", text=result)]
 
         elif name == "get_device_info":
-            port = arguments["port"]
+            port = arguments.get("port", "AUTO")
             device_type = arguments["device_type"]
             result = await get_device_info(port, device_type)
             return [TextContent(type="text", text=result)]
 
         elif name == "get_flash_status":
-            port = arguments["port"]
+            port = arguments.get("port", "AUTO")
             device_type = arguments["device_type"]
             result = await get_flash_status(port, device_type)
             return [TextContent(type="text", text=result)]
 
         elif name == "flash_device":
-            port = arguments["port"]
+            port = arguments.get("port", "AUTO")
             device_type = arguments["device_type"]
             file_path = arguments["file_path"]
-            address = arguments.get("address")
+            # Set default address based on device type
+            default_address = "0x10000" if device_type == "esp32" else "0x100000"
+            address = arguments.get("address", default_address)
             verify = arguments.get("verify", True)
+            force = arguments.get("force", False)
+
+            # Validate file type before flashing
+            try:
+                with open(file_path, 'rb') as f:
+                    file_content = f.read()
+                
+                validation = validate_file_for_device(file_content, device_type)
+                
+                if not validation["valid"]:
+                    if not force:
+                        error_msg = f"❌ File type mismatch!\n\n{validation['warning']}\n\nDetected: {validation['detected_type']}\nIntended: {device_type}\n\nThis could brick your device. Please use the correct firmware file.\n\nTo override this check, set force=true."
+                        return [TextContent(type="text", text=error_msg)]
+                    else:
+                        logger.warning(f"⚠️ FORCED FLASH: {validation['warning']} - User overrode validation")
+                
+                if validation["warning"] and validation["valid"]:
+                    logger.warning(f"File validation warning: {validation['warning']}")
+            
+            except FileNotFoundError:
+                return [TextContent(type="text", text=f"Error: File not found: {file_path}")]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error validating file: {str(e)}")]
 
             if device_type == "fpga":
-                result = await flash_fpga_device(port, file_path, verify)
+                result = await flash_fpga_device(port, file_path, address, verify)
             else:  # esp32
-                if not address:
-                    return [
-                        TextContent(
-                            type="text",
-                            text="Error: address is required for ESP32 flashing",
-                        )
-                    ]
                 result = await flash_esp_device(port, file_path, address, verify)
 
             return [TextContent(type="text", text=result)]

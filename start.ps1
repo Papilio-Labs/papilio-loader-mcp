@@ -1,4 +1,4 @@
-# Papilio Loader - Combined Server Startup Script
+﻿# Papilio Loader - Combined Server Startup Script
 # Runs both MCP server and Web Interface together
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -14,7 +14,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 
 # Check Python version
 $pythonVersion = python --version 2>&1
-Write-Host "✓ Python found: $pythonVersion" -ForegroundColor Green
+Write-Host "Python found: $pythonVersion" -ForegroundColor Green
 
 # Start the combined server
 Write-Host ""

@@ -92,7 +92,7 @@ async def flash_esp_multi_partition(
     Flash multiple partitions to ESP32 using official esptool.
     
     Args:
-        port: Serial port
+        port: Serial port (or "AUTO" for auto-detection)
         partitions: List of (address, file_path) tuples
         verify: Whether to verify after flashing
     
@@ -104,9 +104,13 @@ async def flash_esp_multi_partition(
         cmd = [
             "python",
             "-m", "esptool",
-            "--port", port,
-            "write-flash",  # Use non-deprecated command name
         ]
+        
+        # Add port parameter only if not AUTO (for auto-detection)
+        if port and port.upper() != "AUTO":
+            cmd.extend(["--port", port])
+        
+        cmd.append("write-flash")  # Use non-deprecated command name
         
         if verify:
             cmd.append("--verify")
