@@ -1,8 +1,42 @@
 # GitHub Copilot MCP Server Setup for VS Code
 
-## Quick Setup (Pre-configured!)
+## Quick Setup
 
-This workspace is already configured with `.vscode/settings.json`. To use it:
+### Option 1: Standalone SSE Server (Recommended)
+
+This is the most reliable method and allows the server to run independently.
+
+**1. Start the Combined Server:**
+```powershell
+.\start.ps1
+```
+
+The server will start on port 8000 with SSE endpoint at `/sse`.
+
+**2. Configure VS Code MCP:**
+
+Create or update `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "papilio-loader": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8000/sse"
+    }
+  }
+}
+```
+
+**Important:** VS Code uses `"servers"` (not `"mcpServers"` which is for Claude Desktop).
+
+**3. Reload VS Code:**
+
+Press `Ctrl+Shift+P` → "Developer: Reload Window"
+
+### Option 2: stdio Mode (Legacy)
+
+This workspace can also be configured with `.vscode/settings.json` for stdio mode:
 
 ### 1. Install the Package (One Time)
 

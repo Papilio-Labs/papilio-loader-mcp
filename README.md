@@ -129,7 +129,7 @@ python -m papilio_loader_mcp.http_server --port 8765
 python -m papilio_loader_mcp.http_server --host 0.0.0.0 --port 8765
 ```
 
-The server will start on `http://127.0.0.1:8765` with the SSE endpoint at `/sse`.
+The server will start on `http://127.0.0.1:8000` with the SSE endpoint at `/sse`.
 
 **Configure VS Code:**
 
@@ -137,16 +137,18 @@ Update `.vscode/mcp.json` in your project:
 
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "papilio-loader": {
       "type": "sse",
-      "url": "http://127.0.0.1:8765/sse"
+      "url": "http://127.0.0.1:8000/sse"
     }
   }
 }
 ```
 
-For network access from other machines, use `"url": "http://YOUR_WINDOWS_IP:8765/sse"`.
+**Note:** VS Code uses `"servers"` at the top level (not `"mcpServers"` which is for Claude Desktop).
+
+For network access from other machines, use `"url": "http://YOUR_WINDOWS_IP:8000/sse"`.
 
 **Set up as Windows Service (Optional):**
 
@@ -170,18 +172,20 @@ See [VSCODE_SETUP.md](VSCODE_SETUP.md) for detailed setup instructions.
 
 ### As MCP Server (Claude Desktop)
 
-1. Add to your Claude Desktop configuration:
+1. Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "papilio-loader": {
-      "command": "python",
-      "args": ["-m", "papilio_loader_mcp.server"]
+      "type": "sse",
+      "url": "http://localhost:8000/sse"
     }
   }
 }
 ```
+
+**Note:** Claude Desktop uses `"mcpServers"` at the top level (not `"servers"` which is for VS Code).
 
 2. Restart Claude Desktop
 

@@ -25,6 +25,23 @@ This installs:
 
 ## Configuration
 
+### For MCP (VS Code)
+
+Create `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "papilio-loader": {
+      "type": "sse",
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+Reload VS Code window after updating the config.
+
 ### For MCP (Claude Desktop)
 
 Add to `%APPDATA%\Claude\claude_desktop_config.json`:
@@ -39,6 +56,8 @@ Add to `%APPDATA%\Claude\claude_desktop_config.json`:
   }
 }
 ```
+
+**Note:** VS Code uses `"servers"`, Claude Desktop uses `"mcpServers"`.
 
 Restart Claude Desktop after updating the config.
 

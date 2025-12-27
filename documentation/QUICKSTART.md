@@ -36,6 +36,25 @@ This starts all three interfaces on port 8000:
 
 ## Using the MCP Server
 
+### With VS Code
+
+Create `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "papilio-loader": {
+      "type": "sse",
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+Reload VS Code window, then use GitHub Copilot Chat.
+
+### With Claude Desktop
+
 Add to Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
@@ -49,7 +68,9 @@ Add to Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
 }
 ```
 
-Then ask Claude:
+**Note:** VS Code uses `"servers"`, Claude Desktop uses `"mcpServers"`.
+
+Then ask Claude/Copilot:
 - "List available serial ports"
 - "Flash the FPGA bitstream at C:/path/to/file.bin to COM4"
 - "Get device info for COM3"
