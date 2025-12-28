@@ -1,10 +1,14 @@
 ﻿# -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_data_files
+
+# Collect esptool data files (stub flasher JSON files, etc.)
+datas = collect_data_files('esptool')
 
 a = Analysis(
     ['esptool_entry.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=[
         'esptool',
         'esptool.cmds',
