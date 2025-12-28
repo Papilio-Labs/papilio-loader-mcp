@@ -1,5 +1,6 @@
 """Get device information."""
 
+import sys
 import json
 import asyncio
 from pathlib import Path
@@ -85,7 +86,7 @@ async def _get_esp32_info(port: str) -> str:
         
         # Build command
         cmd = [
-            "python",
+            sys.executable,
             str(pesptool_path),
         ]
         

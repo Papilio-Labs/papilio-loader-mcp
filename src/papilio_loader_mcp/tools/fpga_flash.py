@@ -1,5 +1,6 @@
 """FPGA flashing using pesptool (GadgetFactory esptool fork)."""
 
+import sys
 import json
 import asyncio
 from pathlib import Path
@@ -48,7 +49,7 @@ async def flash_fpga_device(port: str, file_path: str, address: str = "0x100000"
         # Build command for FPGA flashing
         # FPGA bitstreams go to external flash at 0x100000 (1MB offset) by default
         cmd = [
-            "python",
+            sys.executable,
             str(pesptool_path),
         ]
         
