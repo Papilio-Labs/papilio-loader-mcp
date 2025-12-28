@@ -26,7 +26,10 @@ pip install -e .[desktop]
 ```
 
 Output:
-- `dist/PapilioLoader.exe` - Standalone executable
+- `dist/PapilioLoader.exe` - Desktop GUI executable
+- `dist/PapilioLoader-Console.exe` - Console variant (debug output)
+- `dist/pesptool.exe` - Standalone FPGA flashing tool
+- `dist/esptool.exe` - Standalone ESP32 flashing tool
 - `installer_output/PapilioLoader-Setup-x.x.x.exe` - Windows installer
 
 ### Build Executable Only
@@ -40,6 +43,8 @@ or
 ```bash
 python build.py --no-installer
 ```
+
+This still builds `pesptool.exe` and `esptool.exe` alongside the main app.
 
 ### Build Installer from Existing Executable
 
@@ -72,6 +77,10 @@ The spec file is pre-configured to:
 - Hide console window
 - Use appropriate data directories
 
+Standalone tools:
+- `pesptool.spec` builds the FPGA tool
+- `esptool.spec` builds the ESP32 tool and collects chip stub JSON data
+
 ### 3. Create Windows Installer (Optional)
 
 Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then:
@@ -79,6 +88,11 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then:
 ```bash
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ```
+
+Installer includes:
+- `PapilioLoader.exe` and `PapilioLoader-Console.exe`
+- `pesptool.exe` and `esptool.exe`
+- Optional PATH integration to use tools from any command prompt
 
 ## Build Options
 
@@ -128,6 +142,13 @@ datas = [
     ('templates', 'templates'),
     ('tools/pesptool', 'tools/pesptool'),
 ]
+
+For `esptool.exe`, ensure JSON stubs are bundled via `esptool.spec`:
+
+```python
+from PyInstaller.utils.hooks import collect_data_files
+datas = collect_data_files('esptool')
+```
 ```
 
 ### Executable is too large
@@ -160,6 +181,13 @@ Should:
 - Start web server on port 8000
 - Open browser when clicking "Open Web Interface"
 
+Also verify standalone tools:
+
+```powershell
+./dist/pesptool.exe --help
+./dist/esptool.exe --help
+```
+
 ### Test Installer
 
 1. Run the installer
@@ -188,6 +216,8 @@ Update in multiple places:
 - `pyproject.toml` - version field
 - `installer.iss` - `#define MyAppVersion`
 - Optionally create a version resource file for the executable
+
+Note: Update both GUI and tool versions consistently.
 
 ### Application Name
 
@@ -249,3 +279,21 @@ Example GitHub Actions workflow:
 - [DESKTOP_APP.md](DESKTOP_APP.md) - Usage instructions
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
 - [README.md](../README.md) - Main documentation
+
+## Release Checklist
+
+1. Verify version numbers
+  - Confirm [pyproject.toml](../pyproject.toml) `version` matches release (e.g., 0.1.0)
+  - Confirm [installer.iss](../installer.iss) `MyAppVersion` matches
+2. Merge to main
+  - Merge `packaging` branch into `main`
+3. Build artifacts on main
+  - Run `./build.ps1` and confirm outputs in `dist/` and `installer_output/`
+4. Compute SHA256 checksums
+  - Use `Get-FileHash` or `CertUtil` for `PapilioLoader-Setup-*.exe`, `PapilioLoader.exe`, `pesptool.exe`, `esptool.exe`
+5. Update release notes
+  - Paste checksums into [RELEASE_NOTES.md](RELEASE_NOTES.md)
+6. Tag and push
+  - `git tag v0.1.0 && git push origin v0.1.0`
+7. Publish GitHub release
+  - Upload installer and executables; use [RELEASE_NOTES.md](RELEASE_NOTES.md) content

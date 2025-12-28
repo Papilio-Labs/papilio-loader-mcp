@@ -41,6 +41,20 @@ For users who prefer a portable version without installation:
 
 User data will be stored in `%LOCALAPPDATA%\papilio-loader-mcp\` when run as a standalone executable.
 
+## Included Command-Line Tools (Installed Version)
+
+When installed with PATH integration, you can use bundled tools directly from any terminal:
+
+```powershell
+# FPGA (pesptool.exe)
+pesptool.exe --port COM4 write-flash 0x100000 C:\path\to\bitstream.bin
+
+# ESP32 (esptool.exe)
+esptool.exe --port COM4 write-flash 0x1000 C:\path\to\firmware.bin
+```
+
+These tools are also bundled in the installer and placed next to the main application.
+
 ### Method 3: Python Package (For Developers)
 
 If you have Python 3.12+ installed:

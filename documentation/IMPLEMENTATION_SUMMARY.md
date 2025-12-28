@@ -79,6 +79,21 @@ This document summarizes the desktop application implementation for Papilio Load
   - Installation options
   - Quick start guide
 
+### 6. Recent Packaging Changes (Dec 2025) ✅
+
+- **Separated Tools by Device Type**
+  - `pesptool.exe` for FPGA flashing (GadgetFactory fork)
+  - `esptool.exe` for ESP32 flashing (official Espressif tool)
+- **Fixed Write Permissions for Installed Builds**
+  - Moved temp directory to `%LOCALAPPDATA%\papilio-loader-mcp\temp`
+  - All writable data uses the user data directory
+- **Bundled Required Data Files for esptool**
+  - Included chip-specific JSON stub files via `collect_data_files('esptool')`
+  - Prevents `FileNotFoundError` for ESP32 variants (e.g., S3)
+- **Installer Updates**
+  - Includes both `pesptool.exe` and `esptool.exe`
+  - Optional PATH integration to enable CLI use from any terminal
+
 ## File Structure
 
 ```

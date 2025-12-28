@@ -12,6 +12,8 @@ git submodule update --init --recursive
 uv pip install -e .
 ```
 
+Alternatively (Windows users): run the installer `PapilioLoader-Setup-x.x.x.exe` and start `PapilioLoader.exe` from the Start Menu.
+
 ## Starting the Server
 
 ```powershell
