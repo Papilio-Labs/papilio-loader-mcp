@@ -174,26 +174,6 @@ class DesktopApp:
 
 def main():
     """Main entry point for desktop application."""
-    # Check if --console flag was passed
-    show_console = '--console' in sys.argv
-    
-    # On Windows, show console window if requested
-    if sys.platform == 'win32' and show_console:
-        try:
-            import ctypes
-            if getattr(sys, 'frozen', False):
-                # Show console window in frozen executable
-                kernel32 = ctypes.windll.kernel32
-                user32 = ctypes.windll.user32
-                hwnd = kernel32.GetConsoleWindow()
-                if hwnd:
-                    user32.ShowWindow(hwnd, 1)  # SW_SHOWNORMAL = 1
-                    # Also allocate a console if none exists
-                else:
-                    kernel32.AllocConsole()
-        except Exception as e:
-            logger.debug(f"Could not show console: {e}")
-    
     app = DesktopApp()
     
     # Handle signals gracefully

@@ -81,6 +81,7 @@ pyz = PYZ(
     cipher=block_cipher
 )
 
+# Main executable without console (clean GUI app)
 exe = EXE(
     pyz,
     a.scripts,
@@ -95,7 +96,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # Hidden by default, use --console flag to show
+    console=False,  # No console window
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -105,14 +106,27 @@ exe = EXE(
     version=None,  # TODO: Add version info if available
 )
 
-# For directory-based distribution (comment out for single-file)
-# coll = COLLECT(
-#     exe,
-#     a.binaries,
-#     a.zipfiles,
-#     a.datas,
-#     strip=False,
-#     upx=True,
-#     upx_exclude=[],
-#     name='PapilioLoader',
-# )
+# Debug executable with console (for troubleshooting)
+exe_console = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='PapilioLoader-Console',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # Show console for debugging
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None,
+    version=None,
+)
