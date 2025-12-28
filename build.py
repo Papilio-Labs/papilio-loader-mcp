@@ -89,7 +89,7 @@ def build_installer():
     
     # Run Inno Setup compiler
     return run_command(
-        [f'"{iscc_exe}"', "installer.iss"],
+        [iscc_exe, "installer.iss"],
         "Building Windows installer with Inno Setup"
     )
 
