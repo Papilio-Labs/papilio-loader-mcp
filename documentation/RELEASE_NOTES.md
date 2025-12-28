@@ -54,8 +54,8 @@ This release packages Papilio Loader as a Windows desktop application with an in
 - Installation: [INSTALLATION.md](INSTALLATION.md)
  - Changelog: [CHANGELOG.md](CHANGELOG.md)
 
-## Checksums (to publish after build)
-- `installer_output/PapilioLoader-Setup-0.1.0.exe`: SHA256 = <paste here>
-- `dist/PapilioLoader.exe`: SHA256 = <paste here>
-- `dist/pesptool.exe`: SHA256 = <paste here>
-- `dist/esptool.exe`: SHA256 = <paste here>
+## Checksums
+- `installer_output/PapilioLoader-Setup-0.1.0.exe`: SHA256 = 760FE1BDCC917C3890E25D82B689761FAD23425C29751396799613A12C90C2AC
+- `dist/PapilioLoader.exe`: SHA256 = 0392CD3EBBAFD307F1A6E720DDC5C48DAFEF6C670DB18F03E9839734A24AA464
+- `dist/pesptool.exe`: SHA256 = DB0EF34BFA24EB3142F30CA58B6BDA5C2F14D88D284095FA5E799283771AEED5
+- `dist/esptool.exe`: SHA256 = 6301C382D5B8BCD4FF3C993E0432302DEB8E19219D3B33F0155D4B008418BB2F
