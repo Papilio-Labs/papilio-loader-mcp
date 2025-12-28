@@ -9,7 +9,6 @@ The server exposes two endpoints:
 - /messages/: For POST-based message communication
 """
 
-import asyncio
 import logging
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette

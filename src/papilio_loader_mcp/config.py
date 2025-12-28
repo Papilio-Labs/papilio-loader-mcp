@@ -62,9 +62,6 @@ class Config(BaseSettings):
     web_password: str = "admin"  # Web interface password (change in production!)
     session_secret_key: str = "change-this-secret-key-in-production"  # For session encryption
 
-    # Rate limiting (requests per minute)
-    rate_limit: int = 60
-
     # File upload limits (bytes)
     max_upload_size: int = 50 * 1024 * 1024  # 50 MB
 
@@ -88,11 +85,4 @@ def get_config() -> Config:
     global _config
     if _config is None:
         _config = Config()
-    return _config
-
-
-def reload_config() -> Config:
-    """Reload configuration from environment."""
-    global _config
-    _config = Config()
     return _config

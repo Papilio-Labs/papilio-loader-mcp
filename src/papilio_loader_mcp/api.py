@@ -5,7 +5,7 @@ import secrets
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Cookie, Response, Request, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Response, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel

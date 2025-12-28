@@ -1,6 +1,5 @@
 """MCP server core implementation for device programming."""
 
-import asyncio
 import logging
 from typing import Any
 
