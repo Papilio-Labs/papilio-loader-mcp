@@ -26,7 +26,7 @@ from .database import (
     update_saved_file_name,
     update_saved_file_description,
     get_saved_file_path,
-    SAVED_FILES_DIR
+    get_saved_files_dir
 )
 
 # Create FastAPI app
@@ -189,9 +189,18 @@ def check_web_session(request: Request) -> bool:
 @api.get("/web/login", response_class=HTMLResponse)
 async def web_login_page():
     """Serve the login page."""
-    template_path = Path(__file__).parent.parent.parent / "templates" / "login.html"
+    # Get template path - works for both frozen and development
+    import sys
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Running from source
+        base_path = Path(__file__).parent.parent.parent
+    
+    template_path = base_path / "templates" / "login.html"
     if not template_path.exists():
-        raise HTTPException(status_code=404, detail="Login page not found")
+        raise HTTPException(status_code=404, detail=f"Login page not found at {template_path}")
     return HTMLResponse(content=template_path.read_text(encoding='utf-8'), status_code=200)
 
 
@@ -217,9 +226,18 @@ async def web_logout(request: Request):
 async def web_upload_page(request: Request):
     """Serve the upload page (requires authentication)."""
     check_web_session(request)
-    template_path = Path(__file__).parent.parent.parent / "templates" / "upload.html"
+    # Get template path - works for both frozen and development
+    import sys
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Running from source
+        base_path = Path(__file__).parent.parent.parent
+    
+    template_path = base_path / "templates" / "upload.html"
     if not template_path.exists():
-        raise HTTPException(status_code=404, detail="Upload page not found")
+        raise HTTPException(status_code=404, detail=f"Upload page not found at {template_path}")
     return HTMLResponse(content=template_path.read_text(encoding='utf-8'), status_code=200)
 
 
@@ -267,9 +285,9 @@ async def web_flash_device(
             "details": validation["details"]
         }
 
-    # Save uploaded file temporarily
-    temp_dir = Path("temp")
-    temp_dir.mkdir(exist_ok=True)
+    # Save uploaded file temporarily in user data directory
+    temp_dir = config.user_data_dir / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
     temp_file = temp_dir / file.filename
     
     try:
@@ -387,7 +405,8 @@ async def web_save_file(
     stored_filename = f"{uuid.uuid4()}{file_extension}"
     
     # Save file to disk
-    file_path = SAVED_FILES_DIR / stored_filename
+    saved_files_dir = get_saved_files_dir()
+    file_path = saved_files_dir / stored_filename
     with open(file_path, "wb") as f:
         f.write(contents)
     

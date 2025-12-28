@@ -106,7 +106,7 @@
 │              │  - COM3, COM4... │                                 │
 │              └────────┬─────────┘                                 │
 │                       │                                            │
-│                       ▼                                            │
+                        Execute: pesptool.exe --port COM4 write-flash 0x100000 bitstream.bin
 │         ┌─────────────────────────┐                               │
 │         │   Physical Devices      │                               │
 │         ├─────────────────────────┤                               │
@@ -130,7 +130,7 @@ Save uploaded .bin file to temp/
     ↓
 Call flash_fpga_device(port, file_path, verify)
     ↓
-Execute: python pesptool.py --port COM4 write-flash 0x100000 bitstream.bin
+                        Execute: esptool.exe --port COM3 write-flash 0x1000 firmware.bin
     ↓
 pesptool → USB/Serial → Papilio Board
     ↓
@@ -150,7 +150,7 @@ User: "Flash ESP32 on COM3"
     ↓
 Claude → MCP Request: list_tools()
     ↓
-Claude → MCP Request: list_serial_ports()
+                        Execute: esptool.exe --port COM5 write-flash 0x1000 app.bin
     ↓
 Claude → MCP Request: flash_esp_device(...)
     ↓
@@ -227,7 +227,9 @@ papilio-loader-mcp/
 │   ├── login.html
 │   └── upload.html
 │
-├── temp/                        ← Temporary uploads (auto-created)
+├── temp/                        ← Temporary uploads (dev-only)
+│                                 Installed executables use
+│                                 %LOCALAPPDATA%\papilio-loader-mcp\temp
 │
 └── tools/
     └── pesptool/                ← GadgetFactory esptool fork

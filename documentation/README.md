@@ -7,18 +7,21 @@
 - **[INSTALLATION.md](INSTALLATION.md)** - Detailed installation and configuration
 
 ### User Guides
+- **[DESKTOP_APP.md](DESKTOP_APP.md)** - Desktop app usage and installer details
 - **[WEB_INTERFACE_GUIDE.md](WEB_INTERFACE_GUIDE.md)** - Complete guide for the web interface
 - **[SAVED_FILES_FEATURE.md](SAVED_FILES_FEATURE.md)** - Using the saved files library
 - **[INTERFACE_COMPARISON.md](INTERFACE_COMPARISON.md)** - Web vs MCP vs REST API
 
 ### Technical Documentation
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and data flows
+ - **[RELEASE_NOTES.md](RELEASE_NOTES.md)** - Latest release summary
 
 ## Documentation Structure
 
 ```
 documentation/
 ├── README.md                    # This file
+├── RELEASE_NOTES.md            # Versioned release notes
 ├── QUICKSTART.md               # Quick start guide (START HERE)
 ├── INSTALLATION.md             # Installation details
 ├── WEB_INTERFACE_GUIDE.md      # Web UI user guide
@@ -40,6 +43,9 @@ documentation/
 
 **I want to understand the system:**
 → See [ARCHITECTURE.md](ARCHITECTURE.md)
+ 
+**I want the latest release summary:**
+→ See [RELEASE_NOTES.md](RELEASE_NOTES.md)
 
 ## Getting Help
 

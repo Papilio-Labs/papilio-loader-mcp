@@ -1,5 +1,6 @@
 """Get device information."""
 
+import sys
 import json
 import asyncio
 from pathlib import Path
@@ -27,11 +28,21 @@ async def get_device_info(port: str, device_type: str) -> str:
 async def _get_fpga_info(port: str) -> str:
     """Get Papilio FPGA device information using pesptool."""
     try:
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
+        # Use pesptool.exe from the application directory
+        if getattr(sys, 'frozen', False):
+            pesptool_path = Path(sys.executable).parent / "pesptool.exe"
+        else:
+            pesptool_path = Path(__file__).parent.parent.parent.parent / "dist" / "pesptool.exe"
+            if not pesptool_path.exists():
+                import shutil
+                pesptool_in_path = shutil.which("pesptool")
+                if pesptool_in_path:
+                    pesptool_path = Path(pesptool_in_path)
+                else:
+                    return json.dumps({"error": "pesptool.exe not found"}, indent=2)
         
         # Build command
         cmd = [
-            "python",
             str(pesptool_path),
         ]
         
@@ -78,12 +89,21 @@ async def _get_fpga_info(port: str) -> str:
 async def _get_esp32_info(port: str) -> str:
     """Get ESP32 device information using esptool."""
     try:
-        # Use pesptool from the tools/pesptool directory
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
+        # Use pesptool.exe from the application directory
+        if getattr(sys, 'frozen', False):
+            pesptool_path = Path(sys.executable).parent / "pesptool.exe"
+        else:
+            pesptool_path = Path(__file__).parent.parent.parent.parent / "dist" / "pesptool.exe"
+            if not pesptool_path.exists():
+                import shutil
+                pesptool_in_path = shutil.which("pesptool")
+                if pesptool_in_path:
+                    pesptool_path = Path(pesptool_in_path)
+                else:
+                    return json.dumps({"error": "pesptool.exe not found"}, indent=2)
         
         # Build command
         cmd = [
-            "python",
             str(pesptool_path),
         ]
         

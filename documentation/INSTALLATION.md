@@ -1,12 +1,27 @@
 # Installation Guide
 
-## Prerequisites
+## Choose Your Installation Method
 
+### Option A: Windows Installer (Recommended)
+
+1. Download: PapilioLoader-Setup-x.x.x.exe
+2. Run the installer and follow prompts
+3. Optional tasks:
+  - Add Papilio Loader to PATH (command-line tools)
+  - Create Desktop/Start Menu shortcuts
+  - Enable auto-start at login
+
+Includes:
+- GUI apps: PapilioLoader.exe and PapilioLoader-Console.exe
+- Standalone tools: pesptool.exe (FPGA) and esptool.exe (ESP32)
+- User data: %LOCALAPPDATA%\\papilio-loader-mcp\\ (temp, saved_files, DB)
+
+### Option B: Developer Install (Source)
+
+Prerequisites
 - **Python 3.12+**
 - **Git** with submodule support
 - **Windows** (required for COM port access)
-
-## Installation
 
 ```bash
 # Clone repository with submodules
@@ -82,6 +97,14 @@ Access points:
 - **MCP**: http://localhost:8000/sse (for Claude)
 - **API**: http://localhost:8000/docs
 
+Installed Desktop app:
+
+```powershell
+PapilioLoader.exe
+```
+
+Use the tray icon to open the web interface quickly.
+
 ## Testing
 
 ### Test MCP Tools
@@ -129,8 +152,24 @@ git submodule update --init --recursive
 - Check drivers are installed
 - Close other programs using the port
 
+**Write errors in installed app?**
+- Installed executables write to %LOCALAPPDATA%\\papilio-loader-mcp\\ (temp, saved files, DB)
+- Do not write to Program Files; use the user data directory
+
 ## Next Steps
 
 - **Quick Start**: See [QUICKSTART.md](QUICKSTART.md)
 - **Web Guide**: See [WEB_INTERFACE_GUIDE.md](WEB_INTERFACE_GUIDE.md)
 - **Architecture**: See [ARCHITECTURE.md](ARCHITECTURE.md)
+
+## Command-Line Tools (Installed Version)
+
+If PATH integration is selected during installation, use:
+
+```powershell
+# FPGA: write bitstream at 0x100000
+pesptool.exe --port COM4 write-flash 0x100000 C:\path\to\bitstream.bin
+
+# ESP32: write firmware at 0x1000
+esptool.exe --port COM4 write-flash 0x1000 C:\path\to\firmware.bin
+```

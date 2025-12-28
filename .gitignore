@@ -84,5 +84,18 @@ dmypy.json
 
 # pyenv
 .python-version
+
+# Desktop application build artifacts
+dist/
+build/
+*.spec.bak
+installer_output/
+PapilioLoader.exe
+*.exe
+
+# Keep these files (tracked)
+!papilio_loader.spec
+!installer.iss
+
 node_modules/.bin/mkdirp.cmd
 uploads/1766594301040-143812832-blink_led.bin

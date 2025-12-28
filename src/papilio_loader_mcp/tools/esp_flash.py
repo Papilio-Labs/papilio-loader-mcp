@@ -1,11 +1,9 @@
-"""ESP32 flashing using official esptool (safe and stable)."""
+"""ESP32 flashing using official esptool."""
 
+import sys
 import json
 import asyncio
 from pathlib import Path
-
-# esptool is used as a subprocess module, not imported directly
-# This ensures we use the command-line interface
 
 
 async def flash_esp_device(
@@ -40,11 +38,35 @@ async def flash_esp_device(
         }, indent=2)
     
     try:
-        # Build flash command for ESP32 (using esptool as subprocess module)
+        # Use esptool.exe from the application directory
+        if getattr(sys, 'frozen', False):
+            # Running as frozen executable - esptool.exe is in same directory
+            esptool_path = Path(sys.executable).parent / "esptool.exe"
+        else:
+            # Running from source - use the dist/esptool.exe if available
+            esptool_path = Path(__file__).parent.parent.parent.parent / "dist" / "esptool.exe"
+            if not esptool_path.exists():
+                # Fallback: try to find in PATH
+                import shutil
+                esptool_in_path = shutil.which("esptool")
+                if esptool_in_path:
+                    esptool_path = Path(esptool_in_path)
+                else:
+                    return json.dumps({
+                        "success": False,
+                        "error": "esptool.exe not found. Please build it first with: python -m PyInstaller esptool.spec"
+                    }, indent=2)
+        
+        if not esptool_path.exists():
+            return json.dumps({
+                "success": False,
+                "error": f"esptool.exe not found at: {esptool_path}"
+            }, indent=2)
+        
+        # Build flash command for ESP32
         # Note: esptool doesn't support --verify flag, verification happens automatically
         cmd = [
-            "python",
-            "-m", "esptool",
+            str(esptool_path),
         ]
         
         # Add port parameter only if not AUTO (for auto-detection)
@@ -100,10 +122,31 @@ async def flash_esp_multi_partition(
         JSON string with flashing results
     """
     try:
-        # Build multi-partition flash command (using esptool as subprocess module)
+        # Use esptool.exe from the application directory
+        if getattr(sys, 'frozen', False):
+            esptool_path = Path(sys.executable).parent / "esptool.exe"
+        else:
+            esptool_path = Path(__file__).parent.parent.parent.parent / "dist" / "esptool.exe"
+            if not esptool_path.exists():
+                import shutil
+                esptool_in_path = shutil.which("esptool")
+                if esptool_in_path:
+                    esptool_path = Path(esptool_in_path)
+                else:
+                    return json.dumps({
+                        "success": False,
+                        "error": "esptool.exe not found. Please build it first with: python -m PyInstaller esptool.spec"
+                    }, indent=2)
+        
+        if not esptool_path.exists():
+            return json.dumps({
+                "success": False,
+                "error": f"esptool.exe not found at: {esptool_path}"
+            }, indent=2)
+        
+        # Build multi-partition flash command
         cmd = [
-            "python",
-            "-m", "esptool",
+            str(esptool_path),
         ]
         
         # Add port parameter only if not AUTO (for auto-detection)
