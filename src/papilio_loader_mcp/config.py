@@ -28,6 +28,24 @@ def get_user_data_dir() -> Path:
     return Path.cwd()
 
 
+def get_pesptool_path() -> Path:
+    """Get the path to pesptool.py, handling both frozen and development environments.
+    
+    Returns:
+        Path to pesptool.py that exists in the current environment
+    """
+    is_frozen = getattr(sys, 'frozen', False)
+    
+    if is_frozen:
+        # Running as compiled executable - use _MEIPASS
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Running from source - navigate from this file
+        base_path = Path(__file__).parent.parent.parent
+    
+    return base_path / "tools" / "pesptool" / "pesptool.py"
+
+
 class Config(BaseSettings):
     """Application configuration."""
 

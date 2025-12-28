@@ -36,7 +36,8 @@ async def flash_fpga_device(port: str, file_path: str, address: str = "0x100000"
     
     try:
         # Use pesptool from the tools/pesptool directory
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
+        from ..config import get_pesptool_path
+        pesptool_path = get_pesptool_path()
         
         if not pesptool_path.exists():
             return json.dumps({

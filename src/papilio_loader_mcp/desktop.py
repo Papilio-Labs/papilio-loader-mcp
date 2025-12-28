@@ -44,7 +44,60 @@ class DesktopApp:
     
     def run_server(self):
         """Run the uvicorn server."""
-        from start_combined_server import combined_app
+        # Import combined app from the module
+        import sys
+        from pathlib import Path
+        
+        # Add project root to path if needed
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            base_path = Path(sys.executable).parent
+        else:
+            # Running from source
+            base_path = Path(__file__).parent.parent.parent
+        
+        # Import the combined app
+        sys.path.insert(0, str(base_path))
+        
+        try:
+            from start_combined_server import combined_app
+        except ImportError:
+            # If that fails, create the combined app here
+            logger.info("Creating combined app inline")
+            from starlette.applications import Starlette
+            from starlette.routing import Route, Mount
+            from starlette.requests import Request
+            from starlette.responses import Response
+            from mcp.server.sse import SseServerTransport
+            
+            from .server import app as mcp_app
+            from .api import api
+            
+            # Create SSE transport for MCP
+            sse = SseServerTransport("/messages/")
+            
+            async def handle_sse(request: Request):
+                """Handle MCP SSE connections."""
+                async with sse.connect_sse(
+                    request.scope,
+                    request.receive,
+                    request._send,
+                ) as (read_stream, write_stream):
+                    await mcp_app.run(
+                        read_stream,
+                        write_stream,
+                        mcp_app.create_initialization_options(),
+                    )
+            
+            # Create combined app
+            combined_app = Starlette(
+                debug=False,
+                routes=[
+                    # MCP endpoints
+                    Route("/sse", endpoint=handle_sse),
+                    Mount("/", app=api),
+                ],
+            )
         
         # Create server config
         config = uvicorn.Config(
@@ -92,6 +145,18 @@ class DesktopApp:
             self.tray_app.run()
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
+        except Exception as e:
+            logger.error(f"System tray failed: {e}", exc_info=True)
+            print(f"ERROR: System tray failed: {e}")
+            print("Server is still running at http://localhost:8000")
+            print("Press Ctrl+C to stop the server")
+            # Keep the application running even if tray fails
+            try:
+                while not self.should_exit:
+                    import time
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Keyboard interrupt received")
         
         logger.info("Shutting down...")
         

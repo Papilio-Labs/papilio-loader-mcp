@@ -27,7 +27,8 @@ async def get_device_info(port: str, device_type: str) -> str:
 async def _get_fpga_info(port: str) -> str:
     """Get Papilio FPGA device information using pesptool."""
     try:
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
+        from ..config import get_pesptool_path
+        pesptool_path = get_pesptool_path()
         
         # Build command
         cmd = [
@@ -79,7 +80,8 @@ async def _get_esp32_info(port: str) -> str:
     """Get ESP32 device information using esptool."""
     try:
         # Use pesptool from the tools/pesptool directory
-        pesptool_path = Path(__file__).parent.parent.parent.parent / "tools" / "pesptool" / "pesptool.py"
+        from ..config import get_pesptool_path
+        pesptool_path = get_pesptool_path()
         
         # Build command
         cmd = [
