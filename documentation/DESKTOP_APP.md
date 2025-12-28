@@ -78,9 +78,6 @@ python start_desktop.py
 **Python:**
 ```bash
 papilio-loader-desktop
-
-# For debugging with console output:
-papilio-loader-desktop --console
 ```
 
 **Executable:**
@@ -88,8 +85,8 @@ papilio-loader-desktop --console
 # Normal mode (no console window)
 PapilioLoader.exe
 
-# Debug mode with console window
-PapilioLoader.exe --console
+# Debug mode with console output
+PapilioLoader-Console.exe
 ```
 
 ### Using the Application
