@@ -112,9 +112,16 @@ class SystemTrayApp:
             )
         )
     
+    def setup(self, icon):
+        """Setup function called when icon is ready."""
+        icon.visible = True
+        print("System tray icon is now visible")
+    
     def run(self):
         """Run the system tray application."""
         self.running = True
+        
+        print("Creating system tray icon...")
         
         # Create the icon
         self.icon = pystray.Icon(
@@ -124,12 +131,13 @@ class SystemTrayApp:
             menu=self.create_menu()
         )
         
-        # Show notification on startup
-        self.icon.visible = True
+        print("Running system tray icon (this should block)...")
         
         # Run the icon (this blocks until stop() is called)
-        self.icon.run()
+        # Use setup function to ensure proper initialization
+        self.icon.run(setup=self.setup)
         
+        print("System tray icon.run() has exited")
         self.running = False
     
     def run_in_thread(self):
