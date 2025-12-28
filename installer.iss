@@ -55,11 +55,15 @@ Name: "startup"; Description: "Run at Windows startup"; GroupDescription: "Addit
 ; The main executable
 Source: "dist\PapilioLoader.exe"; DestDir: "{app}"; Flags: ignoreversion
 
+; The console debug version
+Source: "dist\PapilioLoader-Console.exe"; DestDir: "{app}"; Flags: ignoreversion
+
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
-; Start Menu shortcut
+; Start Menu shortcuts
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName} (Debug Console)"; Filename: "{app}\PapilioLoader-Console.exe"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop shortcut (if selected)

@@ -5,10 +5,14 @@ Provides a system tray icon with menu for controlling the server.
 
 import webbrowser
 import threading
+import sys
+import logging
 from pathlib import Path
 from PIL import Image, ImageDraw
 import pystray
 from pystray import MenuItem as item
+
+logger = logging.getLogger(__name__)
 
 
 def create_icon_image():
@@ -88,6 +92,8 @@ class SystemTrayApp:
     
     def stop_server(self, icon=None, item=None):
         """Stop the server and exit the application."""
+        logger.info("Stop server requested")
+        self.running = False
         if self.on_exit_callback:
             self.on_exit_callback()
         if self.icon:
@@ -115,12 +121,20 @@ class SystemTrayApp:
     def setup(self, icon):
         """Setup function called when icon is ready."""
         icon.visible = True
+        logger.info("System tray icon setup complete, icon is now visible")
         print("System tray icon is now visible")
     
     def run(self):
-        """Run the system tray application."""
+        """Run the system tray application.
+        
+        For Windows frozen executables (especially windowless), we need to ensure
+        the icon runs with proper message loop handling.
+        """
+        import time
+        
         self.running = True
         
+        logger.info("Creating system tray icon...")
         print("Creating system tray icon...")
         
         # Create the icon
@@ -131,14 +145,45 @@ class SystemTrayApp:
             menu=self.create_menu()
         )
         
-        print("Running system tray icon (this should block)...")
+        logger.info("Starting system tray icon...")
+        print("Starting system tray icon...")
         
-        # Run the icon (this blocks until stop() is called)
-        # Use setup function to ensure proper initialization
-        self.icon.run(setup=self.setup)
-        
-        print("System tray icon.run() has exited")
-        self.running = False
+        try:
+            # For frozen Windows executables, especially windowless builds,
+            # use run_detached() + keep-alive loop to ensure proper operation
+            if getattr(sys, 'frozen', False) and sys.platform == 'win32':
+                logger.info("Using run_detached() for frozen Windows build")
+                
+                # Start icon in a separate thread
+                self.icon.run_detached(setup=self.setup)
+                
+                logger.info("Icon started in detached mode, entering keep-alive loop...")
+                logger.info(f"Initial self.running state: {self.running}")
+                print("System tray is running in background")
+                
+                # Keep-alive loop - this keeps the main thread alive
+                # while the icon runs in its own thread
+                # We check self.running which is set to False by stop_server()
+                iteration = 0
+                while self.running:
+                    time.sleep(0.5)
+                    iteration += 1
+                    if iteration == 1:
+                        logger.info(f"Keep-alive loop iteration {iteration}, self.running={self.running}")
+                
+                logger.info(f"Keep-alive loop exited, self.running={self.running}")
+            else:
+                # Non-frozen or non-Windows: use blocking run()
+                logger.info("Using blocking run() for non-frozen build")
+                self.icon.run(setup=self.setup)
+            
+            logger.info("System tray has shut down normally")
+        except Exception as e:
+            logger.error(f"System tray failed: {e}", exc_info=True)
+            raise
+        finally:
+            print("System tray has exited")
+            self.running = False
     
     def run_in_thread(self):
         """Run the system tray in a separate thread.

@@ -40,6 +40,16 @@ hiddenimports = [
     'pkg_resources.py2_warn',
     'pystray._win32',
     'PIL._tkinter_finder',
+    'papilio_loader_mcp',
+    'papilio_loader_mcp.desktop',
+    'papilio_loader_mcp.tray',
+    'papilio_loader_mcp.config',
+    'papilio_loader_mcp.server',
+    'papilio_loader_mcp.api',
+    'papilio_loader_mcp.database',
+    'papilio_loader_mcp.http_server',
+    'papilio_loader_mcp.file_detector',
+    'papilio_loader_mcp.tools',
 ]
 
 # Collect all submodules from key packages

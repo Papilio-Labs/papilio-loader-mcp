@@ -8,6 +8,7 @@ import logging
 import signal
 import sys
 import threading
+import subprocess
 from pathlib import Path
 
 import uvicorn
@@ -31,6 +32,7 @@ class DesktopApp:
         self.tray_app = None
         self.server = None
         self.server_thread = None
+        self.server_process = None  # For subprocess approach in GUI mode
         self.should_exit = False
         
     def on_exit(self):
@@ -41,6 +43,15 @@ class DesktopApp:
         # Stop the uvicorn server
         if self.server:
             self.server.should_exit = True
+        
+        # Stop subprocess if running
+        if self.server_process:
+            logger.info("Terminating server subprocess...")
+            self.server_process.terminate()
+            try:
+                self.server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.server_process.kill()
     
     def run_server(self):
         """Run the uvicorn server."""
@@ -123,13 +134,44 @@ class DesktopApp:
         logger.info("Starting Papilio Loader Desktop Application")
         logger.info(f"User data directory: {self.config.user_data_dir}")
         
-        # Start server in a separate thread
-        self.server_thread = threading.Thread(target=self.run_server, daemon=True)
-        self.server_thread.start()
-        
-        # Give server a moment to start
-        import time
-        time.sleep(2)
+        # WORKAROUND: In Windows GUI mode (frozen, no console), uvicorn.Config() hangs
+        # due to asyncio event loop issues. Solution: Launch console version as hidden subprocess
+        if getattr(sys, 'frozen', False) and sys.platform == 'win32':
+            # Check if this is the GUI version (look for console version)
+            console_exe = Path(sys.executable).parent / "PapilioLoader-Console.exe"
+            if console_exe.exists() and not sys.executable.endswith('Console.exe'):
+                logger.info(f"GUI mode detected, launching console version as hidden subprocess")
+                logger.info(f"Console executable: {console_exe}")
+                
+                # Create hidden console window
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0  # SW_HIDE
+                
+                self.server_process = subprocess.Popen(
+                    [str(console_exe)],
+                    startupinfo=startupinfo,
+                    creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+                logger.info(f"Server subprocess started with PID: {self.server_process.pid}")
+                
+                # Give server time to start
+                import time
+                time.sleep(3)
+            else:
+                # Console version - use normal threading
+                self.server_thread = threading.Thread(target=self.run_server, daemon=True)
+                self.server_thread.start()
+                logger.info("Server thread started (console mode)")
+                import time
+                time.sleep(2)
+        else:
+            # Not frozen or not Windows - use normal threading
+            self.server_thread = threading.Thread(target=self.run_server, daemon=True)
+            self.server_thread.start()
+            logger.info("Server thread started")
+            import time
+            time.sleep(2)
         
         # Create and run system tray (blocks until exit)
         self.tray_app = SystemTrayApp(
