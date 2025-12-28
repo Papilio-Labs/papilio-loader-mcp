@@ -285,9 +285,9 @@ async def web_flash_device(
             "details": validation["details"]
         }
 
-    # Save uploaded file temporarily
-    temp_dir = Path("temp")
-    temp_dir.mkdir(exist_ok=True)
+    # Save uploaded file temporarily in user data directory
+    temp_dir = config.user_data_dir / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
     temp_file = temp_dir / file.filename
     
     try:
