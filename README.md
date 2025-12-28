@@ -2,10 +2,19 @@
 
 An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firmware over the network. This server runs on Windows with direct access to USB/serial ports, while allowing remote clients (like WSL or Linux machines) to program devices over the network.
 
+## 🎉 NEW: Desktop Application Available!
+
+Papilio Loader is now available as a **desktop application** with system tray integration! Perfect for end users who want a simple, easy-to-use interface.
+
+**[👉 Download Desktop App Installer](https://github.com/GadgetFactory/papilio-loader-mcp/releases)**
+
+See [DESKTOP_APP.md](documentation/DESKTOP_APP.md) for installation and usage instructions.
+
 ## Features
 
-- **Web Interface**: Modern browser-based UI for manual device flashing by end users (NEW!)
-  - **Saved Files Library**: Save frequently-used firmware files with descriptions for easy reuse (NEW!)
+- **Desktop Application** (NEW!): System tray app with one-click installer for Windows
+- **Web Interface**: Modern browser-based UI for manual device flashing by end users
+  - **Saved Files Library**: Save frequently-used firmware files with descriptions for easy reuse
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
 - **REST API**: FastAPI-based HTTP API for remote network access
 - **Dual Programming Tools**: 
@@ -17,7 +26,15 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 
 ## Quick Start
 
-### Web Interface (Recommended for Most Users)
+### Option 1: Desktop Application (Easiest)
+
+1. Download and install `PapilioLoader-Setup-x.x.x.exe` from [Releases](https://github.com/GadgetFactory/papilio-loader-mcp/releases)
+2. Launch Papilio Loader from Start Menu
+3. System tray icon appears - right-click and select "Open Web Interface"
+
+See [DESKTOP_APP.md](documentation/DESKTOP_APP.md) for details.
+
+### Option 2: Web Interface (Python)
 
 ```powershell
 # 1. Install dependencies
@@ -30,7 +47,14 @@ uv pip install -e .
 # Default credentials: admin/admin
 ```
 
-See [WEB_INTERFACE_GUIDE.md](WEB_INTERFACE_GUIDE.md) for detailed instructions.
+See [WEB_INTERFACE_GUIDE.md](documentation/WEB_INTERFACE_GUIDE.md) for detailed instructions.
+
+### Option 3: MCP Server Only
+
+```powershell
+# Install and configure for Claude Desktop or other MCP clients
+# See documentation/QUICKSTART.md
+```
 
 ## Architecture
 

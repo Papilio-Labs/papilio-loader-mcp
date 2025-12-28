@@ -26,7 +26,7 @@ from .database import (
     update_saved_file_name,
     update_saved_file_description,
     get_saved_file_path,
-    SAVED_FILES_DIR
+    get_saved_files_dir
 )
 
 # Create FastAPI app
@@ -387,7 +387,8 @@ async def web_save_file(
     stored_filename = f"{uuid.uuid4()}{file_extension}"
     
     # Save file to disk
-    file_path = SAVED_FILES_DIR / stored_filename
+    saved_files_dir = get_saved_files_dir()
+    file_path = saved_files_dir / stored_filename
     with open(file_path, "wb") as f:
         f.write(contents)
     

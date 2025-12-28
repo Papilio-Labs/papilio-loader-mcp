@@ -15,11 +15,26 @@ dependencies = [
     "sse-starlette>=2.3.0",
     "itsdangerous>=2.2.0",
     "pydantic-settings>=2.0.0",
+    "pystray>=0.19.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+desktop = [
+    "pyinstaller>=6.0.0",
 ]
 
 [project.scripts]
 papilio-loader-mcp = "papilio_loader_mcp.server:main"
+papilio-loader-desktop = "papilio_loader_mcp.desktop:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/papilio_loader_mcp"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"templates" = "share/papilio-loader-mcp/templates"
+"tools/pesptool" = "share/papilio-loader-mcp/tools/pesptool"

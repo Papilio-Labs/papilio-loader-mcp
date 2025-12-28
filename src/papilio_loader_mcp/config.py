@@ -1,8 +1,31 @@
 """Configuration management for the MCP server and API."""
 
 import os
+import sys
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
+
+
+def get_user_data_dir() -> Path:
+    """Get the appropriate user data directory based on the platform and installation type.
+    
+    When running as a frozen app (PyInstaller) on Windows, uses %LOCALAPPDATA%/papilio-loader-mcp
+    Otherwise uses the current working directory.
+    """
+    # Check if running as a PyInstaller bundle
+    is_frozen = getattr(sys, 'frozen', False)
+    
+    if is_frozen and sys.platform == 'win32':
+        # Running as a frozen Windows app - use AppData
+        appdata = os.environ.get('LOCALAPPDATA')
+        if appdata:
+            user_dir = Path(appdata) / 'papilio-loader-mcp'
+            user_dir.mkdir(parents=True, exist_ok=True)
+            return user_dir
+    
+    # Default: use current working directory
+    return Path.cwd()
 
 
 class Config(BaseSettings):
@@ -30,6 +53,9 @@ class Config(BaseSettings):
     # Serial port settings
     default_baud_rate: int = 115200
     serial_timeout: int = 10  # seconds
+    
+    # User data directory (for database, temp files, logs)
+    user_data_dir: Path = get_user_data_dir()
 
     class Config:
         env_prefix = "PAPILIO_"

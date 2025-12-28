@@ -1,0 +1,118 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""
+PyInstaller spec file for Papilio Loader Desktop Application.
+
+This bundles the application with all dependencies, templates, and tools
+into a single executable for Windows.
+
+Usage:
+    pyinstaller papilio_loader.spec
+"""
+
+import sys
+from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+block_cipher = None
+
+# Get the project root directory
+root_dir = Path('.').absolute()
+src_dir = root_dir / 'src'
+templates_dir = root_dir / 'templates'
+tools_dir = root_dir / 'tools'
+
+# Collect all data files from dependencies
+datas = []
+
+# Add templates
+datas.append((str(templates_dir), 'templates'))
+
+# Add tools (pesptool)
+datas.append((str(tools_dir / 'pesptool'), 'tools/pesptool'))
+
+# Collect data files from packages that need them
+datas += collect_data_files('esptool')
+datas += collect_data_files('fastapi')
+datas += collect_data_files('starlette')
+
+# Hidden imports - modules that PyInstaller might miss
+hiddenimports = [
+    'pkg_resources.py2_warn',
+    'pystray._win32',
+    'PIL._tkinter_finder',
+]
+
+# Collect all submodules from key packages
+hiddenimports += collect_submodules('esptool')
+hiddenimports += collect_submodules('serial')
+hiddenimports += collect_submodules('uvicorn')
+hiddenimports += collect_submodules('starlette')
+hiddenimports += collect_submodules('fastapi')
+hiddenimports += collect_submodules('mcp')
+hiddenimports += collect_submodules('pydantic')
+hiddenimports += collect_submodules('pydantic_core')
+
+a = Analysis(
+    ['start_desktop.py'],
+    pathex=[str(src_dir)],
+    binaries=[],
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        'matplotlib',
+        'numpy',
+        'pandas',
+        'scipy',
+        'pytest',
+        'setuptools',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=block_cipher
+)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='PapilioLoader',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,  # Hide console window for desktop app
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None,  # TODO: Add icon file if available
+    version=None,  # TODO: Add version info if available
+)
+
+# For directory-based distribution (comment out for single-file)
+# coll = COLLECT(
+#     exe,
+#     a.binaries,
+#     a.zipfiles,
+#     a.datas,
+#     strip=False,
+#     upx=True,
+#     upx_exclude=[],
+#     name='PapilioLoader',
+# )

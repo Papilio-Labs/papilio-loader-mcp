@@ -5,18 +5,30 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Dict
 import json
+from .config import get_config
 
-# Database file location
-DB_PATH = Path(__file__).parent.parent.parent / "saved_files.db"
-SAVED_FILES_DIR = Path(__file__).parent.parent.parent / "saved_files"
+# Database file location - uses user data directory
+def get_db_path() -> Path:
+    """Get the database path from config."""
+    config = get_config()
+    return config.user_data_dir / "saved_files.db"
 
-# Ensure saved files directory exists
-SAVED_FILES_DIR.mkdir(exist_ok=True)
+def get_saved_files_dir() -> Path:
+    """Get the saved files directory from config."""
+    config = get_config()
+    saved_dir = config.user_data_dir / "saved_files"
+    saved_dir.mkdir(parents=True, exist_ok=True)
+    return saved_dir
+
+# For backwards compatibility
+DB_PATH = None  # Will be set dynamically
+SAVED_FILES_DIR = None  # Will be set dynamically
 
 
 def get_db_connection():
     """Get a database connection."""
-    conn = sqlite3.connect(DB_PATH)
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row  # Return rows as dictionaries
     return conn
 
@@ -195,7 +207,8 @@ def delete_saved_file(file_id: int) -> bool:
     conn.close()
     
     # Delete physical file
-    file_path = SAVED_FILES_DIR / file_info['stored_filename']
+    saved_files_dir = get_saved_files_dir()
+    file_path = saved_files_dir / file_info['stored_filename']
     if file_path.exists():
         file_path.unlink()
     
@@ -208,7 +221,8 @@ def get_saved_file_path(file_id: int) -> Optional[Path]:
     if not file_info:
         return None
     
-    return SAVED_FILES_DIR / file_info['stored_filename']
+    saved_files_dir = get_saved_files_dir()
+    return saved_files_dir / file_info['stored_filename']
 
 
 # Initialize database on module import
