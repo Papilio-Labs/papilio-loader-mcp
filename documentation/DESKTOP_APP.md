@@ -17,7 +17,7 @@ The Papilio Loader is now available as a desktop application with system tray in
 
 The easiest way to install Papilio Loader on Windows:
 
-1. Download the latest `PapilioLoader-Setup-x.x.x.exe` from [Releases](https://github.com/GadgetFactory/papilio-loader-mcp/releases)
+1. Download the latest `PapilioLoader-Setup-x.x.x.exe` from [Releases](https://github.com/Papilio-Labs/papilio-loader-mcp/releases)
 2. Run the installer
 3. Choose installation options:
    - ✅ Create desktop shortcut (optional)
@@ -35,7 +35,7 @@ The application will be installed to `C:\Program Files\Papilio Loader\` and user
 
 For users who prefer a portable version without installation:
 
-1. Download `PapilioLoader.exe` from [Releases](https://github.com/GadgetFactory/papilio-loader-mcp/releases)
+1. Download `PapilioLoader.exe` from [Releases](https://github.com/Papilio-Labs/papilio-loader-mcp/releases)
 2. Place it in any folder
 3. Run the executable
 
@@ -50,7 +50,7 @@ If you have Python 3.12+ installed:
 pip install papilio-loader-mcp
 
 # Or install from source with desktop dependencies
-git clone https://github.com/GadgetFactory/papilio-loader-mcp.git
+git clone https://github.com/Papilio-Labs/papilio-loader-mcp.git
 cd papilio-loader-mcp
 pip install -e .[desktop]
 ```
@@ -137,7 +137,7 @@ Or create a `.env` file in the application directory.
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/GadgetFactory/papilio-loader-mcp.git
+git clone https://github.com/Papilio-Labs/papilio-loader-mcp.git
 cd papilio-loader-mcp
 ```
 
@@ -308,7 +308,7 @@ For advanced users who want to run Papilio Loader as a Windows Service, consider
 
 ## Support
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/GadgetFactory/papilio-loader-mcp/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/Papilio-Labs/papilio-loader-mcp/issues)
 - **Documentation**: See other docs in the `documentation/` folder
 - **Community**: Gadget Factory forums and Discord
 

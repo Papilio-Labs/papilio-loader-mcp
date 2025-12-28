@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 
 Papilio Loader is now available as a **desktop application** with system tray integration! Perfect for end users who want a simple, easy-to-use interface.
 
-**[👉 Download Desktop App Installer](https://github.com/GadgetFactory/papilio-loader-mcp/releases)**
+**[👉 Download Desktop App Installer](https://github.com/Papilio-Labs/papilio-loader-mcp/releases)**
 
 See [DESKTOP_APP.md](documentation/DESKTOP_APP.md) for installation and usage instructions.
 
@@ -28,7 +28,7 @@ See [DESKTOP_APP.md](documentation/DESKTOP_APP.md) for installation and usage in
 
 ### Option 1: Desktop Application (Easiest)
 
-1. Download and install `PapilioLoader-Setup-x.x.x.exe` from [Releases](https://github.com/GadgetFactory/papilio-loader-mcp/releases)
+1. Download and install `PapilioLoader-Setup-x.x.x.exe` from [Releases](https://github.com/Papilio-Labs/papilio-loader-mcp/releases)
 2. Launch Papilio Loader from Start Menu
 3. System tray icon appears - right-click and select "Open Web Interface"
 
