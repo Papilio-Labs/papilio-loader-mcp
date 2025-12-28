@@ -43,6 +43,18 @@ def clean_build():
     print("✅ Cleanup complete")
 
 
+def build_pesptool():
+    """Build pesptool.exe standalone executable."""
+    if not Path('pesptool.spec').exists():
+        print("❌ Error: pesptool.spec not found")
+        return False
+    
+    return run_command(
+        [sys.executable, "-m", "PyInstaller", "pesptool.spec", "--clean"],
+        "Building pesptool.exe with PyInstaller"
+    )
+
+
 def build_executable():
     """Build the executable using PyInstaller."""
     if not Path('papilio_loader.spec').exists():
@@ -56,7 +68,21 @@ def build_executable():
         "Installing dependencies"
     )
     
-    # Run PyInstaller
+    # Build pesptool.exe first
+    print("\n🔧 Building pesptool.exe standalone tool...")
+    if not build_pesptool():
+        print("❌ pesptool.exe build failed!")
+        return False
+    
+    # Copy pesptool.exe to dist for bundling
+    pesptool_exe = Path('dist/pesptool.exe')
+    if not pesptool_exe.exists():
+        print("❌ Error: pesptool.exe not found after build")
+        return False
+    
+    print(f"✅ pesptool.exe built: {pesptool_exe.absolute()}")
+    
+    # Run PyInstaller for main application
     return run_command(
         [sys.executable, "-m", "PyInstaller", "papilio_loader.spec", "--clean"],
         "Building executable with PyInstaller"

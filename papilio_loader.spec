@@ -19,7 +19,7 @@ block_cipher = None
 root_dir = Path('.').absolute()
 src_dir = root_dir / 'src'
 templates_dir = root_dir / 'templates'
-tools_dir = root_dir / 'tools'
+dist_dir = root_dir / 'dist'
 
 # Collect all data files from dependencies
 datas = []
@@ -27,8 +27,10 @@ datas = []
 # Add templates
 datas.append((str(templates_dir), 'templates'))
 
-# Add tools (pesptool)
-datas.append((str(tools_dir / 'pesptool'), 'tools/pesptool'))
+# Add pesptool.exe if it exists (built separately)
+pesptool_exe = dist_dir / 'pesptool.exe'
+if pesptool_exe.exists():
+    datas.append((str(pesptool_exe), '.'))
 
 # Collect data files from packages that need them
 datas += collect_data_files('esptool')
