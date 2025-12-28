@@ -50,7 +50,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startup"; Description: "Run at Windows startup"; GroupDescription: "Additional options:"; Flags: unchecked
-Name: "addtopath"; Description: "Add pesptool.exe to system PATH (for command-line use)"; GroupDescription: "Additional options:"; Flags: unchecked
+Name: "addtopath"; Description: "Add pesptool.exe and esptool.exe to system PATH (for command-line use)"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
 ; The main executable
@@ -62,6 +62,9 @@ Source: "dist\PapilioLoader-Console.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Standalone pesptool.exe for command-line use
 Source: "dist\pesptool.exe"; DestDir: "{app}"; Flags: ignoreversion
 
+; Standalone esptool.exe for command-line use
+Source: "dist\esptool.exe"; DestDir: "{app}"; Flags: ignoreversion
+
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
@@ -69,6 +72,7 @@ Source: "dist\pesptool.exe"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{#MyAppName} (Debug Console)"; Filename: "{app}\PapilioLoader-Console.exe"
 Name: "{group}\pesptool Command Prompt"; Filename: "cmd.exe"; Parameters: "/K echo pesptool.exe is available && echo. && echo Type 'pesptool --help' for usage"; WorkingDir: "{app}"; Comment: "Open command prompt with pesptool.exe"
+Name: "{group}\esptool Command Prompt"; Filename: "cmd.exe"; Parameters: "/K echo esptool.exe is available && echo. && echo Type 'esptool --help' for usage"; WorkingDir: "{app}"; Comment: "Open command prompt with esptool.exe"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop shortcut (if selected)

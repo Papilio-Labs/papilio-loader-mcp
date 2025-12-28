@@ -55,6 +55,18 @@ def build_pesptool():
     )
 
 
+def build_esptool():
+    """Build esptool.exe standalone executable."""
+    if not Path('esptool.spec').exists():
+        print("❌ Error: esptool.spec not found")
+        return False
+    
+    return run_command(
+        [sys.executable, "-m", "PyInstaller", "esptool.spec", "--clean"],
+        "Building esptool.exe with PyInstaller"
+    )
+
+
 def build_executable():
     """Build the executable using PyInstaller."""
     if not Path('papilio_loader.spec').exists():
@@ -133,6 +145,20 @@ def main():
     # Clean previous builds
     if not skip_clean and not installer_only:
         clean_build()
+    
+    # Build standalone tool executables first
+    if not installer_only:
+        print("\n📦 Building standalone tool executables...")
+        
+        if not build_pesptool():
+            print("\n❌ pesptool build failed!")
+            return 1
+        print("✅ pesptool.exe built successfully!")
+        
+        if not build_esptool():
+            print("\n❌ esptool build failed!")
+            return 1
+        print("✅ esptool.exe built successfully!")
     
     # Build executable
     if not installer_only:

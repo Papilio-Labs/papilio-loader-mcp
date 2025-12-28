@@ -32,6 +32,11 @@ pesptool_exe = dist_dir / 'pesptool.exe'
 if pesptool_exe.exists():
     datas.append((str(pesptool_exe), '.'))
 
+# Add esptool.exe if it exists (built separately)
+esptool_exe = dist_dir / 'esptool.exe'
+if esptool_exe.exists():
+    datas.append((str(esptool_exe), '.'))
+
 # Collect data files from packages that need them
 datas += collect_data_files('esptool')
 datas += collect_data_files('fastapi')
