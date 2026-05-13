@@ -147,8 +147,8 @@ python start_combined_server.py
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ## Checksums
-Checksums will be added after build completion:
-- `installer_output/PapilioLoader-Setup-0.2.0.exe`: SHA256 = TBD
-- `dist/PapilioLoader.exe`: SHA256 = TBD
-- `dist/pesptool.exe`: SHA256 = TBD
-- `dist/esptool.exe`: SHA256 = TBD
+SHA256 checksums for release files:
+- `installer_output/PapilioLoader-Setup-0.2.0.exe`: `DA67E12A281AEE9F6FAF47303ECEF71882FEB01328ABB7B913B9A41266206559`
+- `dist/PapilioLoader.exe`: `3A36DB5D36E839170A9C415CC267CF392633410B24E93BF5ABDFFDFCDA676764`
+- `dist/pesptool.exe`: `4ACD17A08A16F480EEA3B1D0449BFE0F82D95BF8E16BFA68BE1F9097A2DDAE2A`
+- `dist/esptool.exe`: `616B48A7C991541914491DBC0CE62B7990D67CD6C83915EEA4861B9BCC097106`
