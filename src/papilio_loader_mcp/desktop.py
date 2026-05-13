@@ -3,7 +3,6 @@
 Runs the combined server with system tray integration.
 """
 
-import asyncio
 import logging
 import signal
 import sys
@@ -73,12 +72,10 @@ class DesktopApp:
         try:
             from start_combined_server import combined_app
         except ImportError:
-            # If that fails, create the combined app here
+            # If that fails, create the combined app here as fallback
             logger.info("Creating combined app inline")
             from starlette.applications import Starlette
             from starlette.routing import Route, Mount
-            from starlette.requests import Request
-            from starlette.responses import Response
             from mcp.server.sse import SseServerTransport
             
             from .server import app as mcp_app
@@ -87,7 +84,7 @@ class DesktopApp:
             # Create SSE transport for MCP
             sse = SseServerTransport("/messages/")
             
-            async def handle_sse(request: Request):
+            async def handle_sse(request):
                 """Handle MCP SSE connections."""
                 async with sse.connect_sse(
                     request.scope,
@@ -104,7 +101,6 @@ class DesktopApp:
             combined_app = Starlette(
                 debug=False,
                 routes=[
-                    # MCP endpoints
                     Route("/sse", endpoint=handle_sse),
                     Mount("/", app=api),
                 ],

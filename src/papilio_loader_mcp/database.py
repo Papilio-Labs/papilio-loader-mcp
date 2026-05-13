@@ -2,9 +2,7 @@
 
 import sqlite3
 from pathlib import Path
-from datetime import datetime
 from typing import List, Optional, Dict
-import json
 from .config import get_config
 
 # Database file location - uses user data directory
@@ -19,10 +17,6 @@ def get_saved_files_dir() -> Path:
     saved_dir = config.user_data_dir / "saved_files"
     saved_dir.mkdir(parents=True, exist_ok=True)
     return saved_dir
-
-# For backwards compatibility
-DB_PATH = None  # Will be set dynamically
-SAVED_FILES_DIR = None  # Will be set dynamically
 
 
 def get_db_connection():

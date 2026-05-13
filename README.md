@@ -13,6 +13,10 @@ See [DESKTOP_APP.md](documentation/DESKTOP_APP.md) for installation and usage in
 ## Features
 
 - **Desktop Application** (NEW!): System tray app with one-click installer for Windows
+- **OTA Updates** (NEW!): Flash devices over WiFi/network without USB connection
+  - Discover OTA-capable devices on local network
+  - Flash ESP32 firmware and FPGA bitstreams wirelessly
+  - Supports devices with HTTP OTA endpoints (port 3232)
 - **Web Interface**: Modern browser-based UI for manual device flashing by end users
   - **Saved Files Library**: Save frequently-used firmware files with descriptions for easy reuse
 - **MCP Server**: Integrates with Claude Desktop and other MCP clients for AI-assisted device programming
@@ -263,10 +267,55 @@ curl -X POST http://localhost:8000/flash/upload \
 
 The server provides these MCP tools:
 
+### USB/Serial Programming
 - `list_serial_ports`: List all available COM ports
 - `get_device_info`: Query device information (FPGA/ESP32)
 - `get_flash_status`: Get flash memory status and info
-- `flash_device`: Flash firmware to device with verification
+- `flash_device`: Flash firmware to device with verification via USB/serial
+
+### OTA (Over-The-Air) Programming
+- `discover_ota_devices`: Scan local network for OTA-capable devices (HTTP endpoint on port 3232)
+- `check_device_ip`: Check if a specific IP address has an OTA endpoint available
+- `flash_device_ota`: Flash ESP32 firmware or FPGA bitstream via WiFi/network
+
+### OTA Usage Examples
+
+**Discover devices on network:**
+```python
+# Returns list of devices with their IP addresses and endpoints
+discover_ota_devices(timeout=2, port=3232)
+```
+
+**Check specific device:**
+```python
+# Verify device at known IP has OTA capability
+check_device_ip(ip="10.0.4.35", port=3232)
+```
+
+**Flash via OTA:**
+```python
+# Flash ESP32 firmware
+flash_device_ota(
+    ip="10.0.4.35",
+    device_type="esp32",
+    file_path="build/fpga_companion.bin",
+    port=3232
+)
+
+# Flash FPGA bitstream
+flash_device_ota(
+    ip="10.0.4.35",
+    device_type="fpga",
+    file_path="impl/pnr/a2600nano_retrocade.bin",
+    port=3232
+)
+```
+
+**Note:** OTA flashing requires:
+- Device must be running firmware with HTTP OTA server on port 3232
+- Device must be connected to same network
+- ESP32 OTA endpoint: `POST http://IP:3232/update`
+- FPGA OTA endpoint: `POST http://IP:3232/fpga-update`
 
 ## Development
 
