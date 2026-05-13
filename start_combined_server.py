@@ -70,9 +70,13 @@ def run_combined_server(host: str = "0.0.0.0", port: int = 8000):
     logger.info(f"Server running on: http://{display_host}:{port}")
     logger.info("")
     logger.info("📱 Web Interface:")
-    logger.info(f"   Login: http://{display_host}:{port}/web/login")
-    logger.info(f"   Username: {config.web_username}")
-    logger.info(f"   Password: {config.web_password}")
+    if config.require_web_auth:
+        logger.info(f"   Login: http://{display_host}:{port}/web/login")
+        logger.info(f"   Username: {config.web_username}")
+        logger.info(f"   Password: {config.web_password}")
+    else:
+        logger.info(f"   Direct Access: http://{display_host}:{port}/web/upload")
+        logger.info("   Authentication: Disabled (local network mode)")
     logger.info("")
     logger.info("🔌 MCP Interface (for AI assistants):")
     logger.info(f"   SSE endpoint: http://{display_host}:{port}/sse")

@@ -183,6 +183,10 @@ class LoginRequest(BaseModel):
 
 def check_web_session(request: Request) -> bool:
     """Check if user is authenticated via web session."""
+    # Skip authentication check if not required
+    if not config.require_web_auth:
+        return True
+    
     if not request.session.get("authenticated"):
         raise HTTPException(status_code=401, detail="Not authenticated")
     return True
@@ -191,6 +195,10 @@ def check_web_session(request: Request) -> bool:
 @api.get("/web/login", response_class=HTMLResponse)
 async def web_login_page():
     """Serve the login page."""
+    # If authentication is disabled, redirect to upload page
+    if not config.require_web_auth:
+        return RedirectResponse(url="/web/upload")
+    
     # Get template path - works for both frozen and development
     import sys
     if getattr(sys, 'frozen', False):
@@ -602,8 +610,12 @@ async def web_download_saved_file(request: Request, file_id: int):
 # Redirect root to web interface
 @api.get("/", response_class=HTMLResponse)
 async def root():
-    """Redirect to web login."""
-    return RedirectResponse(url="/web/login")
+    """Redirect to web interface."""
+    # Redirect to upload page if auth is disabled, otherwise to login
+    if config.require_web_auth:
+        return RedirectResponse(url="/web/login")
+    else:
+        return RedirectResponse(url="/web/upload")
 
 
 if __name__ == "__main__":
