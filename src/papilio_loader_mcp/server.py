@@ -12,6 +12,8 @@ from .tools.device_info import get_device_info
 from .tools.flash_status import get_flash_status
 from .tools.fpga_flash import flash_fpga_device
 from .tools.esp_flash import flash_esp_device
+from .tools.network_discovery import discover_ota_devices, check_device_ip
+from .tools.ota_flash import flash_device_ota
 from .file_detector import validate_file_for_device
 
 # Configure logging
@@ -109,6 +111,72 @@ async def list_tools() -> list[Tool]:
                 "required": ["device_type", "file_path"],
             },
         ),
+        Tool(
+            name="discover_ota_devices",
+            description="Discover OTA-capable devices on the local network by scanning for HTTP endpoints on port 3232",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in seconds for each device check (default: 2)",
+                        "default": 2,
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "OTA server port to scan (default: 3232)",
+                        "default": 3232,
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="check_device_ip",
+            description="Check if a specific IP address has an OTA endpoint available",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ip": {
+                        "type": "string",
+                        "description": "IP address to check (e.g., 10.0.4.35)",
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "OTA server port (default: 3232)",
+                        "default": 3232,
+                    },
+                },
+                "required": ["ip"],
+            },
+        ),
+        Tool(
+            name="flash_device_ota",
+            description="Flash a device via OTA (Over-The-Air) using WiFi/network instead of USB. Requires device IP address.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ip": {
+                        "type": "string",
+                        "description": "Device IP address (e.g., 10.0.4.35)",
+                    },
+                    "device_type": {
+                        "type": "string",
+                        "enum": ["fpga", "esp32"],
+                        "description": "Type of device to flash",
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to firmware file (bin or elf for ESP32, bin for FPGA)",
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "OTA server port (default: 3232)",
+                        "default": 3232,
+                    },
+                },
+                "required": ["ip", "device_type", "file_path"],
+            },
+        ),
     ]
 
 
@@ -169,6 +237,46 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             else:  # esp32
                 result = await flash_esp_device(port, file_path, address, verify)
 
+            return [TextContent(type="text", text=result)]
+
+        elif name == "discover_ota_devices":
+            timeout = arguments.get("timeout", 2)
+            port = arguments.get("port", 3232)
+            result = await discover_ota_devices(timeout, port)
+            return [TextContent(type="text", text=result)]
+
+        elif name == "check_device_ip":
+            ip = arguments["ip"]
+            port = arguments.get("port", 3232)
+            result = await check_device_ip(ip, port)
+            return [TextContent(type="text", text=result)]
+
+        elif name == "flash_device_ota":
+            ip = arguments["ip"]
+            device_type = arguments["device_type"]
+            file_path = arguments["file_path"]
+            port = arguments.get("port", 3232)
+            
+            # Validate file type before flashing
+            try:
+                with open(file_path, 'rb') as f:
+                    file_content = f.read()
+                
+                validation = validate_file_for_device(file_content, device_type)
+                
+                if not validation["valid"]:
+                    error_msg = f"❌ File type mismatch!\n\n{validation['warning']}\n\nDetected: {validation['detected_type']}\nIntended: {device_type}\n\nThis could brick your device. Please use the correct firmware file."
+                    return [TextContent(type="text", text=error_msg)]
+                
+                if validation["warning"] and validation["valid"]:
+                    logger.warning(f"File validation warning: {validation['warning']}")
+            
+            except FileNotFoundError:
+                return [TextContent(type="text", text=f"Error: File not found: {file_path}")]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error validating file: {str(e)}")]
+            
+            result = await flash_device_ota(ip, device_type, file_path, port)
             return [TextContent(type="text", text=result)]
 
         else:
