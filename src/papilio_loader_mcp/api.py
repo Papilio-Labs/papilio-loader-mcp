@@ -16,6 +16,8 @@ from .tools.device_info import get_device_info
 from .tools.flash_status import get_flash_status
 from .tools.fpga_flash import flash_fpga_device
 from .tools.esp_flash import flash_esp_device
+from .tools.network_discovery import discover_ota_devices, check_device_ip
+from .tools.ota_flash import flash_device_ota
 from .config import get_config
 from .file_detector import validate_file_for_device
 from .database import (
@@ -348,6 +350,115 @@ async def web_flash_device(
             data=response_data,
         )
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        return ApiResponse(
+            success=False,
+            message=str(e),
+            data={"error": str(e), "traceback": traceback.format_exc()}
+        )
+    
+    finally:
+        # Clean up temp file
+        if temp_file.exists():
+            temp_file.unlink()
+
+
+# OTA (Over-The-Air) Web Interface Endpoints
+@api.get("/web/discover-ota-devices")
+async def web_discover_ota_devices(request: Request):
+    """Discover OTA-capable devices on the network."""
+    check_web_session(request)
+    
+    result_json = await discover_ota_devices(timeout=2, port=3232)
+    
+    import json
+    result = json.loads(result_json)
+    
+    return {"success": result.get("success", False), "data": result}
+
+
+@api.post("/web/check-ota-device")
+async def web_check_ota_device(
+    request: Request,
+    ip: str = Form(...)
+):
+    """Check if a specific IP has an OTA endpoint."""
+    check_web_session(request)
+    
+    result_json = await check_device_ip(ip, port=3232)
+    
+    import json
+    result = json.loads(result_json)
+    
+    return {"success": result.get("success", False), "data": result}
+
+
+@api.post("/web/flash-ota")
+async def web_flash_ota(
+    request: Request,
+    ip: str = Form(...),
+    device_type: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Flash device via OTA (requires authentication)."""
+    check_web_session(request)
+    
+    # Validate file size
+    contents = await file.read()
+    if len(contents) > config.max_upload_size:
+        raise HTTPException(
+            status_code=413, detail=f"File too large (max {config.max_upload_size} bytes)"
+        )
+    
+    # Validate file type matches intended device
+    validation = validate_file_for_device(contents, device_type)
+    file_type_warning = None
+    
+    if not validation["valid"]:
+        file_type_warning = {
+            "warning": validation["warning"],
+            "detected_type": validation["detected_type"],
+            "intended_device": device_type,
+            "details": validation["details"]
+        }
+    
+    # Save uploaded file temporarily
+    temp_dir = config.user_data_dir / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_file = temp_dir / file.filename
+    
+    try:
+        with open(temp_file, "wb") as f:
+            f.write(contents)
+        
+        # Flash via OTA
+        result_json = await flash_device_ota(ip, device_type, str(temp_file), port=3232)
+        
+        import json
+        result = json.loads(result_json)
+        
+        if not result.get("success"):
+            return ApiResponse(
+                success=False,
+                message=result.get("error", "OTA flash failed"),
+                data={"error": result.get("error"), "result": result}
+            )
+        
+        response_data = {"result": result}
+        
+        # Include file type warning if present
+        if file_type_warning:
+            response_data["file_type_warning"] = file_type_warning
+        
+        return ApiResponse(
+            success=True,
+            message="OTA flash successful" + (" (with warning)" if file_type_warning else ""),
+            data=response_data,
+        )
+    
     except HTTPException:
         raise
     except Exception as e:

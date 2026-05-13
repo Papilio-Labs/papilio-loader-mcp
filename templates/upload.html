@@ -558,6 +558,123 @@
         .rename-btn:hover {
             background: #f57c00;
         }
+        
+        /* OTA Flash Method Selector */
+        .flash-method-group {
+            background: #f0f4ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .flash-method-group label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            display: block;
+        }
+        
+        .flash-method-options {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .flash-method-option {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+        
+        .flash-method-option:hover {
+            border-color: #667eea;
+            background: #fafbff;
+        }
+        
+        .flash-method-option input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .flash-method-option.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .ota-fields {
+            display: none;
+        }
+        
+        .ota-fields.show {
+            display: block;
+        }
+        
+        .usb-fields {
+            display: block;
+        }
+        
+        .usb-fields.hide {
+            display: none;
+        }
+        
+        .discover-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+        
+        .discover-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.3);
+        }
+        
+        .discover-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .device-list {
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: white;
+        }
+        
+        .device-item {
+            padding: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .device-item:hover {
+            background: #f0f4ff;
+        }
+        
+        .device-item:last-child {
+            border-bottom: none;
+        }
+        
+        .device-item.selected {
+            background: #e3f2fd;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -572,6 +689,37 @@
             <div class="card">
                 <h2>📟 FPGA Flash (Gowin)</h2>
                 <form id="fpgaForm" onsubmit="flashDevice(event, 'fpga')">
+                    <!-- Flash Method Selector -->
+                    <div class="flash-method-group">
+                        <label>Flash Method:</label>
+                        <div class="flash-method-options">
+                            <div class="flash-method-option selected" onclick="selectFlashMethod('fpga', 'usb')">
+                                <input type="radio" name="fpgaFlashMethod" value="usb" checked>
+                                <span>🔌 USB/Serial</span>
+                            </div>
+                            <div class="flash-method-option" onclick="selectFlashMethod('fpga', 'ota')">
+                                <input type="radio" name="fpgaFlashMethod" value="ota">
+                                <span>📡 OTA (WiFi)</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- OTA Fields (hidden by default) -->
+                    <div id="fpgaOtaFields" class="ota-fields">
+                        <div class="form-group">
+                            <label for="fpgaOtaIp">Device IP Address:</label>
+                            <input type="text" id="fpgaOtaIp" placeholder="10.0.4.35" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                            <button type="button" class="discover-btn" onclick="discoverOtaDevices('fpga')">
+                                🔍 Discover Devices
+                            </button>
+                            <div id="fpgaDeviceList" class="device-list" style="display: none;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- USB Fields (shown by default) -->
+                    <div id="fpgaUsbFields" class="usb-fields">
+                    </div>
+                    
                     <div class="form-group">
                         <label class="file-upload">
                             <input type="file" id="fpgaFile" accept=".bin" required>
@@ -629,6 +777,37 @@
             <div class="card">
                 <h2>📡 ESP32 Flash</h2>
                 <form id="esp32Form" onsubmit="flashDevice(event, 'esp32')">
+                    <!-- Flash Method Selector -->
+                    <div class="flash-method-group">
+                        <label>Flash Method:</label>
+                        <div class="flash-method-options">
+                            <div class="flash-method-option selected" onclick="selectFlashMethod('esp32', 'usb')">
+                                <input type="radio" name="esp32FlashMethod" value="usb" checked>
+                                <span>🔌 USB/Serial</span>
+                            </div>
+                            <div class="flash-method-option" onclick="selectFlashMethod('esp32', 'ota')">
+                                <input type="radio" name="esp32FlashMethod" value="ota">
+                                <span>📡 OTA (WiFi)</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- OTA Fields (hidden by default) -->
+                    <div id="esp32OtaFields" class="ota-fields">
+                        <div class="form-group">
+                            <label for="esp32OtaIp">Device IP Address:</label>
+                            <input type="text" id="esp32OtaIp" placeholder="10.0.4.35" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                            <button type="button" class="discover-btn" onclick="discoverOtaDevices('esp32')">
+                                🔍 Discover Devices
+                            </button>
+                            <div id="esp32DeviceList" class="device-list" style="display: none;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- USB Fields (shown by default) -->
+                    <div id="esp32UsbFields" class="usb-fields">
+                    </div>
+                    
                     <div class="form-group">
                         <label class="file-upload">
                             <input type="file" id="esp32File" accept=".bin,.elf" required>
@@ -1181,6 +1360,14 @@
         async function flashDevice(event, deviceType) {
             event.preventDefault();
             
+            // Check flash method
+            const flashMethod = document.querySelector(`input[name="${deviceType}FlashMethod"]:checked`)?.value || 'usb';
+            
+            if (flashMethod === 'ota') {
+                return await flashDeviceOta(event, deviceType);
+            }
+            
+            // USB/Serial flash (existing code)
             const port = document.getElementById(`${deviceType}Port`).value;
             const fileInput = document.getElementById(`${deviceType}File`);
             const verify = document.getElementById(`${deviceType}Verify`).checked;
@@ -1296,6 +1483,189 @@
         function clearLog() {
             const log = document.getElementById('statusLog');
             log.innerHTML = '<p class="info">Log cleared. Ready to flash devices...</p>';
+        }
+        
+        // OTA Flash Functions
+        function selectFlashMethod(deviceType, method) {
+            // Update radio button
+            document.querySelector(`input[name="${deviceType}FlashMethod"][value="${method}"]`).checked = true;
+            
+            // Update visual selection
+            document.querySelectorAll(`input[name="${deviceType}FlashMethod"]`).forEach(radio => {
+                radio.parentElement.classList.toggle('selected', radio.checked);
+            });
+            
+            // Show/hide appropriate fields
+            const otaFields = document.getElementById(`${deviceType}OtaFields`);
+            const usbFields = document.getElementById(`${deviceType}UsbFields`);
+            const advancedSection = document.getElementById(`${deviceType}Advanced`);
+            
+            if (method === 'ota') {
+                otaFields.classList.add('show');
+                usbFields.classList.add('hide');
+                // USB port is in advanced section, so hide advanced toggle for OTA
+                if (advancedSection && advancedSection.previousElementSibling) {
+                    advancedSection.previousElementSibling.style.display = 'none';
+                    advancedSection.style.display = 'none';
+                }
+            } else {
+                otaFields.classList.remove('show');
+                usbFields.classList.remove('hide');
+                if (advancedSection && advancedSection.previousElementSibling) {
+                    advancedSection.previousElementSibling.style.display = 'block';
+                }
+            }
+        }
+        
+        async function discoverOtaDevices(deviceType) {
+            const button = event.target;
+            const deviceListDiv = document.getElementById(`${deviceType}DeviceList`);
+            
+            button.disabled = true;
+            button.textContent = '🔍 Discovering...';
+            deviceListDiv.innerHTML = '<div style="padding: 10px; text-align: center;">Scanning network...</div>';
+            deviceListDiv.style.display = 'block';
+            
+            try {
+                addLog('Scanning network for OTA devices...', 'info');
+                
+                const response = await fetch('/web/discover-ota-devices', {
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success && result.data.devices_found > 0) {
+                    const devices = result.data.devices;
+                    addLog(`✅ Found ${devices.length} OTA device(s)`, 'success');
+                    
+                    deviceListDiv.innerHTML = devices.map(device => `
+                        <div class="device-item" onclick="selectOtaDevice('${deviceType}', '${device.ip}')">
+                            📡 ${device.ip}
+                        </div>
+                    `).join('');
+                } else {
+                    addLog('❌ No OTA devices found on network', 'error');
+                    deviceListDiv.innerHTML = '<div style="padding: 10px; text-align: center; color: #999;">No devices found</div>';
+                }
+                
+            } catch (error) {
+                addLog(`❌ Discovery error: ${error.message}`, 'error');
+                deviceListDiv.innerHTML = '<div style="padding: 10px; text-align: center; color: #e74c3c;">Error discovering devices</div>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🔍 Discover Devices';
+            }
+        }
+        
+        function selectOtaDevice(deviceType, ip) {
+            // Set IP in input field
+            document.getElementById(`${deviceType}OtaIp`).value = ip;
+            
+            // Update visual selection
+            const deviceList = document.getElementById(`${deviceType}DeviceList`);
+            deviceList.querySelectorAll('.device-item').forEach(item => {
+                item.classList.toggle('selected', item.textContent.includes(ip));
+            });
+            
+            addLog(`Selected device: ${ip}`, 'info');
+        }
+        
+        async function flashDeviceOta(event, deviceType) {
+            const fileInput = document.getElementById(`${deviceType}File`);
+            const ip = document.getElementById(`${deviceType}OtaIp`).value;
+            const button = event.target.querySelector('.flash-btn');
+            const saveFile = document.getElementById(`${deviceType}SaveFile`)?.checked || false;
+            const saveFilename = document.getElementById(`${deviceType}SaveFilename`)?.value || '';
+            const saveDescription = document.getElementById(`${deviceType}SaveDescription`)?.value || '';
+            
+            if (!fileInput.files[0]) {
+                addLog('Please select a file', 'error');
+                return;
+            }
+            
+            if (!ip) {
+                addLog('Please enter device IP address or discover devices', 'error');
+                return;
+            }
+            
+            // Validate IP format
+            const ipPattern = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+            if (!ipPattern.test(ip)) {
+                addLog('Invalid IP address format', 'error');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            // Save file to library if requested (do this BEFORE flashing)
+            if (saveFile) {
+                await saveFileToLibrary(deviceType, file, saveDescription, saveFilename);
+            }
+            
+            button.disabled = true;
+            button.textContent = '⏳ Flashing via OTA...';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('ip', ip);
+            formData.append('device_type', deviceType);
+            
+            try {
+                addLog(`Starting ${deviceType.toUpperCase()} OTA flash to ${ip}...`, 'info');
+                addLog(`File: ${file.name} (${formatFileSize(file.size)})`, 'info');
+                
+                const response = await fetch('/web/flash-ota', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Show file type warning FIRST if present
+                    if (data.data?.file_type_warning) {
+                        addLog('\n⚠️  FILE TYPE WARNING!', 'error');
+                        addLog(`   Detected: ${data.data.file_type_warning.detected_type.toUpperCase()} firmware`, 'error');
+                        addLog(`   Intended: ${data.data.file_type_warning.intended_device.toUpperCase()} device`, 'error');
+                        addLog('   Flashed anyway - device may not work correctly.\n', 'error');
+                    }
+                    
+                    addLog(`✅ ${data.message}`, 'success');
+                    
+                    if (data.data?.result?.response) {
+                        addLog(`   Response: ${data.data.result.response.trim()}`, 'info');
+                    }
+                    
+                    // Show file size transferred
+                    if (data.data?.result?.file_size) {
+                        addLog(`   Size: ${formatFileSize(data.data.result.file_size)}`, 'info');
+                    }
+                    
+                } else {
+                    addLog(`❌ Flash failed: ${data.message}`, 'error');
+                    
+                    // Show troubleshooting tips for OTA failures
+                    if (data.data?.result?.troubleshooting) {
+                        addLog('\nTroubleshooting:', 'info');
+                        data.data.result.troubleshooting.forEach(tip => {
+                            addLog(`   • ${tip}`, 'info');
+                        });
+                    }
+                    
+                    if (data.data?.error) {
+                        addLog(`   Error: ${data.data.error}`, 'error');
+                    }
+                }
+                
+            } catch (error) {
+                addLog(`❌ OTA Error: ${error.message}`, 'error');
+                console.error('OTA flash error:', error);
+            } finally {
+                button.disabled = false;
+                button.textContent = `⚡ Flash ${deviceType.toUpperCase()}`;
+            }
         }
         
         async function logout() {
