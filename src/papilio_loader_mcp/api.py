@@ -1,9 +1,13 @@
 """FastAPI REST API for remote network access."""
 
+import asyncio
 import os
 import secrets
+import socket as _socket_module
+import sys
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Response, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -483,6 +487,142 @@ async def web_flash_ota(
             temp_file.unlink()
 
 
+# ============================================================================
+import json as _json
+
+def _json_err(msg: str) -> str:
+    return _json.dumps({"type": "error", "text": msg})
+
+# WiFi Log Monitor (UDP → Server-Sent Events)
+# ============================================================================
+
+class _WiFiLogManager:
+    """Singleton that owns the UDP socket and fans out to subscribed SSE queues."""
+
+    WIFI_LOG_PORT = 7777
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._socket: Optional[_socket_module.socket] = None
+        self._thread: Optional[threading.Thread] = None
+        self._running = False
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._queues: Set[asyncio.Queue] = set()
+
+    def _listen_thread(self):
+        try:
+            self._socket = _socket_module.socket(_socket_module.AF_INET, _socket_module.SOCK_DGRAM)
+            self._socket.setsockopt(_socket_module.SOL_SOCKET, _socket_module.SO_REUSEADDR, 1)
+            self._socket.bind(("", self.WIFI_LOG_PORT))
+            self._socket.settimeout(1.0)
+            while self._running:
+                try:
+                    data, _addr = self._socket.recvfrom(4096)
+                    text = data.decode(errors="replace")
+                    with self._lock:
+                        queues = list(self._queues)
+                    for q in queues:
+                        if self._loop:
+                            asyncio.run_coroutine_threadsafe(q.put(text), self._loop)
+                except _socket_module.timeout:
+                    pass
+                except OSError:
+                    if self._running:
+                        continue
+                    break
+        except Exception as exc:
+            with self._lock:
+                queues = list(self._queues)
+            for q in queues:
+                if self._loop:
+                    asyncio.run_coroutine_threadsafe(
+                        q.put(_json_err(str(exc))), self._loop
+                    )
+        finally:
+            if self._socket:
+                try:
+                    self._socket.close()
+                except Exception:
+                    pass
+                self._socket = None
+            self._running = False
+
+    def subscribe(self, loop: asyncio.AbstractEventLoop) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue()
+        with self._lock:
+            self._queues.add(q)
+            if not self._running:
+                self._loop = loop
+                self._running = True
+                self._thread = threading.Thread(target=self._listen_thread, daemon=True)
+                self._thread.start()
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue):
+        with self._lock:
+            self._queues.discard(q)
+            if not self._queues and self._running:
+                self._running = False
+                if self._socket:
+                    try:
+                        self._socket.close()
+                    except Exception:
+                        pass
+
+
+wifi_log_manager = _WiFiLogManager()
+
+
+@api.get("/web/wifi-log", response_class=HTMLResponse)
+async def web_wifi_log_page(request: Request):
+    """Standalone WiFi log monitor pop-out page."""
+    check_web_session(request)
+    try:
+        base_path = Path(sys._MEIPASS)
+    except AttributeError:
+        base_path = Path(__file__).parent.parent.parent
+    template_path = base_path / "templates" / "wifi_log.html"
+    return HTMLResponse(content=template_path.read_text(encoding='utf-8'), status_code=200)
+
+
+@api.get("/web/wifi-log/stream")
+async def web_wifi_log_stream(request: Request):
+    """Stream FPGA Companion WiFi log via UDP port 7777 as Server-Sent Events."""
+    check_web_session(request)
+
+    async def event_generator():
+        loop = asyncio.get_event_loop()
+        queue = wifi_log_manager.subscribe(loop)
+        try:
+            yield f"data: {_json.dumps({'type': 'connected', 'message': f'Listening on UDP port {_WiFiLogManager.WIFI_LOG_PORT}...'})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    # payload is either a pre-serialized error JSON string or raw log text
+                    try:
+                        parsed = _json.loads(payload)
+                        if parsed.get("type") == "error":
+                            yield f"data: {payload}\n\n"
+                            break
+                    except (ValueError, AttributeError):
+                        pass
+                    for line in payload.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+                        yield f"data: {_json.dumps({'type': 'log', 'text': line})}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"data: {_json.dumps({'type': 'ping'})}\n\n"
+        finally:
+            wifi_log_manager.unsubscribe(queue)
+
+    from starlette.responses import StreamingResponse
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # Saved Files Management Endpoints
 @api.get("/web/saved-files")
 async def web_get_saved_files(request: Request, device_type: Optional[str] = None):
@@ -491,6 +631,95 @@ async def web_get_saved_files(request: Request, device_type: Optional[str] = Non
     
     files = get_saved_files(device_type)
     return {"success": True, "files": files}
+
+
+@api.get("/web/saved-files/export")
+async def web_export_saved_files(request: Request):
+    """Export all saved files as a ZIP archive."""
+    check_web_session(request)
+
+    import io
+    import json as _json_mod
+    import zipfile
+
+    files = get_saved_files()
+    saved_files_dir = get_saved_files_dir()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = []
+        for f in files:
+            file_path = saved_files_dir / f["stored_filename"]
+            if file_path.exists():
+                zf.write(file_path, f["original_filename"])
+                manifest.append({
+                    "original_filename": f["original_filename"],
+                    "device_type": f["device_type"],
+                    "description": f["description"],
+                    "file_size": f["file_size"],
+                })
+        zf.writestr("manifest.json", _json_mod.dumps(manifest, indent=2))
+    buf.seek(0)
+
+    from starlette.responses import StreamingResponse
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="papilio_saved_files.zip"'},
+    )
+
+
+@api.post("/web/saved-files/import")
+async def web_import_saved_files(request: Request, file: UploadFile = File(...)):
+    """Import saved files from a ZIP archive."""
+    check_web_session(request)
+
+    import io
+    import json as _json_mod
+    import os as _os
+    import uuid as _uuid
+    import zipfile
+
+    contents = await file.read()
+    try:
+        buf = io.BytesIO(contents)
+        with zipfile.ZipFile(buf, "r") as zf:
+            try:
+                manifest_data = _json_mod.loads(zf.read("manifest.json"))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid ZIP: missing manifest.json")
+
+            saved_files_dir = get_saved_files_dir()
+            imported = 0
+            for entry in manifest_data:
+                fname = entry.get("original_filename", "")
+                if not fname:
+                    continue
+                device_type = entry.get("device_type", "fpga")
+                description = entry.get("description", "")
+                try:
+                    file_data = zf.read(fname)
+                except KeyError:
+                    continue
+                ext = _os.path.splitext(fname)[1]
+                stored_filename = f"{_uuid.uuid4()}{ext}"
+                file_path = saved_files_dir / stored_filename
+                with open(file_path, "wb") as fp:
+                    fp.write(file_data)
+                add_saved_file(
+                    original_filename=fname,
+                    stored_filename=stored_filename,
+                    device_type=device_type,
+                    description=description,
+                    file_size=len(file_data),
+                )
+                imported += 1
+
+        return ApiResponse(success=True, message=f"Imported {imported} file(s) successfully")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(exc)}")
 
 
 @api.post("/web/save-file")

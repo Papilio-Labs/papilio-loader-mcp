@@ -675,6 +675,141 @@
             background: #e3f2fd;
             font-weight: 600;
         }
+
+        /* WiFi Log Monitor */
+        .wifi-log-toggle {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            transition: all 0.2s;
+        }
+
+        .wifi-log-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
+        }
+
+        .wifi-log-toggle::after {
+            content: '▼';
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        .wifi-log-toggle.collapsed::after {
+            transform: rotate(-90deg);
+        }
+
+        .wifi-log-section {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            max-height: 800px;
+        }
+
+        .wifi-log-section.collapsed {
+            max-height: 0;
+        }
+
+        .wifi-log-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .wifi-start-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .wifi-start-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
+        }
+
+        .wifi-stop-btn {
+            padding: 10px 20px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: none;
+        }
+
+        .wifi-stop-btn:hover {
+            background: #ee5a5a;
+            transform: translateY(-2px);
+        }
+
+        .wifi-status-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #e0e0e0;
+            color: #666;
+        }
+
+        .wifi-status-badge.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .wifi-status-badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .wifi-log-display {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 450px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+        }
+
+        .wifi-log-display .wifi-line {
+            margin: 0;
+            padding: 1px 0;
+        }
+
+        .wifi-log-display .wifi-meta {
+            color: #58a6ff;
+            font-style: italic;
+        }
+
+        .wifi-log-display .wifi-error {
+            color: #ff7b72;
+        }
     </style>
 </head>
 <body>
@@ -693,12 +828,12 @@
                     <div class="flash-method-group">
                         <label>Flash Method:</label>
                         <div class="flash-method-options">
-                            <div class="flash-method-option selected" onclick="selectFlashMethod('fpga', 'usb')">
-                                <input type="radio" name="fpgaFlashMethod" value="usb" checked>
+                            <div class="flash-method-option" onclick="selectFlashMethod('fpga', 'usb')">
+                                <input type="radio" name="fpgaFlashMethod" value="usb">
                                 <span>🔌 USB/Serial</span>
                             </div>
-                            <div class="flash-method-option" onclick="selectFlashMethod('fpga', 'ota')">
-                                <input type="radio" name="fpgaFlashMethod" value="ota">
+                            <div class="flash-method-option selected" onclick="selectFlashMethod('fpga', 'ota')">
+                                <input type="radio" name="fpgaFlashMethod" value="ota" checked>
                                 <span>📡 OTA (WiFi)</span>
                             </div>
                         </div>
@@ -781,12 +916,12 @@
                     <div class="flash-method-group">
                         <label>Flash Method:</label>
                         <div class="flash-method-options">
-                            <div class="flash-method-option selected" onclick="selectFlashMethod('esp32', 'usb')">
-                                <input type="radio" name="esp32FlashMethod" value="usb" checked>
+                            <div class="flash-method-option" onclick="selectFlashMethod('esp32', 'usb')">
+                                <input type="radio" name="esp32FlashMethod" value="usb">
                                 <span>🔌 USB/Serial</span>
                             </div>
-                            <div class="flash-method-option" onclick="selectFlashMethod('esp32', 'ota')">
-                                <input type="radio" name="esp32FlashMethod" value="ota">
+                            <div class="flash-method-option selected" onclick="selectFlashMethod('esp32', 'ota')">
+                                <input type="radio" name="esp32FlashMethod" value="ota" checked>
                                 <span>📡 OTA (WiFi)</span>
                             </div>
                         </div>
@@ -861,12 +996,32 @@
                 </form>
             </div>
         </div>
-        
+
+        <!-- Status Log -->
+        <div class="status-card">
+            <div class="status-header">
+                <h2>📊 Status Log</h2>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <label style="font-size:13px;color:#555;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" id="keepLogHistory"> Keep history
+                    </label>
+                    <button class="clear-log-btn" onclick="clearLog()">🗑️ Clear Log</button>
+                </div>
+            </div>
+            <div class="status-log" id="statusLog">
+                <p class="info">Ready to flash devices...</p>
+            </div>
+        </div>
+
         <!-- Saved Files Section -->
         <div class="status-card">
-            <button type="button" class="saved-files-toggle collapsed" onclick="toggleSavedFiles()">
-                💾 Saved Files Library
-            </button>
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:15px;">
+                <button type="button" class="saved-files-toggle collapsed" style="flex:1;margin-bottom:0;" onclick="toggleSavedFiles()">
+                    💾 Saved Files Library
+                </button>
+                <button type="button" onclick="exportSavedFiles()" style="padding:10px 14px;background:#667eea;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;flex-shrink:0;" title="Export all as ZIP">⬇️ Export</button>
+                <label style="display:inline-block;padding:10px 14px;background:#4ecdc4;color:white;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;flex-shrink:0;" title="Import from ZIP">⬆️ Import<input type="file" id="importZipInput" accept=".zip" style="display:none;" onchange="importSavedFiles(this)"></label>
+            </div>
             
             <div id="savedFilesSection" class="saved-files-section collapsed">
                 <div class="saved-files-tabs">
@@ -881,16 +1036,31 @@
             </div>
         </div>
         
-        <!-- Status Log -->
-        <div class="status-card">
-            <div class="status-header">
-                <h2>📊 Status Log</h2>
-                <button class="clear-log-btn" onclick="clearLog()">🗑️ Clear Log</button>
+        <!-- WiFi Log Monitor -->
+        <div class="status-card" style="position:relative;">
+            <button type="button" class="wifi-log-toggle collapsed" onclick="toggleWifiLog()">
+                📡 WiFi Log Monitor (FPGA Companion)
+            </button>
+            <div style="position:absolute;top:0;right:0;padding:8px;">
+                <button type="button" onclick="window.open('/web/wifi-log','wifiLogPopout','width=1000,height=680,resizable=yes,scrollbars=no')" style="background:#21262d;color:#3fb950;border:1px solid #238636;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;" title="Open in pop-out window">&#128270; Pop Out</button>
             </div>
-            <div class="status-log" id="statusLog">
-                <p class="info">Ready to flash devices...</p>
+
+            <div id="wifiLogSection" class="wifi-log-section collapsed">
+                <div class="wifi-log-controls">
+                    <button id="wifiStartBtn" class="wifi-start-btn" onclick="startWifiLog()">▶ Start Monitoring</button>
+                    <button id="wifiStopBtn" class="wifi-stop-btn" onclick="stopWifiLog()">⏹ Stop</button>
+                    <span id="wifiStatusBadge" class="wifi-status-badge">● Idle</span>
+                    <button class="clear-log-btn" onclick="clearWifiLog()">🗑️ Clear</button>
+                </div>
+                <small style="display:block; color:#666; margin-bottom:12px;">
+                    Listens for UDP datagrams on port 7777 sent by the FPGA Companion WiFi log.
+                </small>
+                <div class="wifi-log-display" id="wifiLogDisplay">
+                    <p class="wifi-line wifi-meta">Press ▶ Start Monitoring to begin...</p>
+                </div>
             </div>
         </div>
+
     </div>
 
     <script>
@@ -899,6 +1069,14 @@
         // Load ports on page load
         loadPorts();
         loadSavedFiles();
+        selectFlashMethod('fpga', 'ota');
+        selectFlashMethod('esp32', 'ota');
+
+        // Restore last-used OTA IPs from previous session
+        ['fpga', 'esp32'].forEach(dt => {
+            const saved = localStorage.getItem(`lastOtaIp_${dt}`);
+            if (saved) document.getElementById(`${dt}OtaIp`).value = saved;
+        });
         
         // Setup file name displays and file type checking
         document.getElementById('fpgaFile').addEventListener('change', function(e) {
@@ -1221,6 +1399,11 @@
         
         async function saveFileToLibrary(deviceType, file, description, customFilename) {
             try {
+                // Auto-add file extension if missing
+                if (customFilename && !customFilename.includes('.')) {
+                    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
+                    customFilename = customFilename + '.' + ext;
+                }
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('device_type', deviceType);
@@ -1237,6 +1420,9 @@
                 
                 if (data.success) {
                     addLog(`✓ Saved "${file.name}" to library`, 'success');
+                    // Uncheck to prevent duplicate saves on subsequent flashes
+                    const saveChk = document.getElementById(`${deviceType}SaveFile`);
+                    if (saveChk) { saveChk.checked = false; toggleSaveDescription(deviceType); }
                 } else {
                     addLog(`Failed to save file: ${data.message}`, 'error');
                 }
@@ -1359,7 +1545,9 @@
         
         async function flashDevice(event, deviceType) {
             event.preventDefault();
-            
+
+            if (!document.getElementById('keepLogHistory')?.checked) clearLog();
+
             // Check flash method
             const flashMethod = document.querySelector(`input[name="${deviceType}FlashMethod"]:checked`)?.value || 'usb';
             
@@ -1513,6 +1701,7 @@
                 usbFields.classList.remove('hide');
                 if (advancedSection && advancedSection.previousElementSibling) {
                     advancedSection.previousElementSibling.style.display = 'block';
+                    advancedSection.style.display = '';
                 }
             }
         }
@@ -1559,8 +1748,9 @@
         }
         
         function selectOtaDevice(deviceType, ip) {
-            // Set IP in input field
+            // Set IP in input field and persist it
             document.getElementById(`${deviceType}OtaIp`).value = ip;
+            localStorage.setItem(`lastOtaIp_${deviceType}`, ip);
             
             // Update visual selection
             const deviceList = document.getElementById(`${deviceType}DeviceList`);
@@ -1572,6 +1762,8 @@
         }
         
         async function flashDeviceOta(event, deviceType) {
+            if (!document.getElementById('keepLogHistory')?.checked) clearLog();
+
             const fileInput = document.getElementById(`${deviceType}File`);
             const ip = document.getElementById(`${deviceType}OtaIp`).value;
             const button = event.target.querySelector('.flash-btn');
@@ -1624,6 +1816,9 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Persist the IP that just worked
+                    localStorage.setItem(`lastOtaIp_${deviceType}`, ip);
+
                     // Show file type warning FIRST if present
                     if (data.data?.file_type_warning) {
                         addLog('\n⚠️  FILE TYPE WARNING!', 'error');
@@ -1668,8 +1863,130 @@
             }
         }
         
-        async function logout() {
+        // ── WiFi Log Monitor ──────────────────────────────────────────
+        let wifiEventSource = null;
+
+        function toggleWifiLog() {
+            const section = document.getElementById('wifiLogSection');
+            const button = event.currentTarget;
+            section.classList.toggle('collapsed');
+            button.classList.toggle('collapsed');
+        }
+
+        function setWifiStatus(state, label) {
+            const badge = document.getElementById('wifiStatusBadge');
+            badge.textContent = label;
+            badge.className = 'wifi-status-badge' + (state ? ' ' + state : '');
+        }
+
+        function appendWifiLine(text, cssClass) {
+            const display = document.getElementById('wifiLogDisplay');
+            const p = document.createElement('p');
+            p.className = 'wifi-line' + (cssClass ? ' ' + cssClass : '');
+            p.textContent = text;
+            display.appendChild(p);
+            display.scrollTop = display.scrollHeight;
+        }
+
+        function clearWifiLog() {
+            const display = document.getElementById('wifiLogDisplay');
+            display.innerHTML = '<p class="wifi-line wifi-meta">Log cleared.</p>';
+        }
+
+        function startWifiLog() {
+            if (wifiEventSource) return;
+
+            document.getElementById('wifiStartBtn').style.display = 'none';
+            document.getElementById('wifiStopBtn').style.display = 'inline-block';
+            setWifiStatus('', '● Connecting...');
+
+            const display = document.getElementById('wifiLogDisplay');
+            display.innerHTML = '';
+
+            wifiEventSource = new EventSource('/web/wifi-log/stream');
+
+            wifiEventSource.onmessage = function(e) {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === 'connected') {
+                        setWifiStatus('connected', '● ' + msg.message);
+                        appendWifiLine(msg.message, 'wifi-meta');
+                    } else if (msg.type === 'log') {
+                        if (msg.text.trim() !== '') {
+                            appendWifiLine(msg.text);
+                        }
+                    } else if (msg.type === 'ping') {
+                        // keep-alive, ignore
+                    }
+                } catch (err) {
+                    appendWifiLine('[parse error] ' + e.data, 'wifi-error');
+                }
+            };
+
+            wifiEventSource.onerror = function() {
+                setWifiStatus('error', '● Connection lost');
+                appendWifiLine('[connection closed or error]', 'wifi-error');
+                stopWifiLog();
+            };
+        }
+
+        function stopWifiLog() {
+            if (wifiEventSource) {
+                wifiEventSource.close();
+                wifiEventSource = null;
+            }
+            document.getElementById('wifiStartBtn').style.display = 'inline-block';
+            document.getElementById('wifiStopBtn').style.display = 'none';
+            setWifiStatus('', '● Idle');
+        }
+        // ─────────────────────────────────────────────────────────────
+
+        async function exportSavedFiles() {
             try {
+                addLog('Exporting saved files...', 'info');
+                const response = await fetch('/web/saved-files/export', { credentials: 'include' });
+                if (!response.ok) throw new Error('Export failed');
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'papilio_saved_files.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                addLog('✓ Exported successfully', 'success');
+            } catch (error) {
+                addLog('Export error: ' + error.message, 'error');
+            }
+        }
+
+        async function importSavedFiles(input) {
+            const file = input.files[0];
+            if (!file) return;
+            input.value = '';
+            try {
+                addLog('Importing saved files...', 'info');
+                const formData = new FormData();
+                formData.append('file', file);
+                const response = await fetch('/web/saved-files/import', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    addLog(`✓ ${data.message}`, 'success');
+                    loadSavedFiles();
+                } else {
+                    addLog('Import failed: ' + data.message, 'error');
+                }
+            } catch (error) {
+                addLog('Import error: ' + error.message, 'error');
+            }
+        }
+
+        async function logout() {            try {
                 await fetch('/web/logout', {
                     method: 'POST',
                     credentials: 'include'

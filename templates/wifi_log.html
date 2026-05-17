@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WiFi Log - FPGA Companion</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0d0d;color:#c8c8c8;font-family:Consolas,Monaco,"Courier New",monospace;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#titlebar{background:#161b22;border-bottom:2px solid #238636;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;user-select:none}
+#titlebar h1{font-size:13px;font-weight:bold;color:#3fb950;letter-spacing:.5px}
+#statusBadge{font-size:12px;padding:3px 10px;border-radius:12px;background:#21262d;border:1px solid #444;color:#888;transition:color .2s,border-color .2s}
+#statusBadge.connected{color:#3fb950;border-color:#238636}
+#statusBadge.error{color:#f85149;border-color:#da3633}
+#statusBadge.stopped{color:#888;border-color:#444}
+#terminal{flex:1;overflow-y:auto;padding:8px 14px;line-height:1.55}
+#terminal::-webkit-scrollbar{width:6px}
+#terminal::-webkit-scrollbar-track{background:#0d0d0d}
+#terminal::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.log-line{color:#c8c8c8;white-space:pre-wrap;word-break:break-all}
+.meta-line{color:#555;font-style:italic;white-space:pre-wrap}
+.error-line{color:#f85149;white-space:pre-wrap}
+.hint-box{margin:10px 0;padding:10px 14px;background:#1c1c1c;border-left:3px solid #da3633;color:#e6a817;line-height:1.7}
+.hint-cmd{display:block;margin-top:6px;color:#79c0ff;user-select:all;cursor:text}
+#toolbar{background:#111;border-top:1px solid #21262d;padding:6px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+button{background:#21262d;color:#c8c8c8;border:1px solid #30363d;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:monospace;font-size:12px}
+button:hover:not(:disabled){background:#30363d}
+button:disabled{opacity:.4;cursor:default}
+#stopBtn{color:#f85149;border-color:#da3633}
+#stopBtn:hover:not(:disabled){background:#da3633;color:#fff}
+#reconnectBtn{color:#3fb950;border-color:#238636}
+#reconnectBtn:hover:not(:disabled){background:#238636;color:#fff}
+#autoScrollLabel{margin-left:auto;color:#555;font-size:12px;cursor:pointer;user-select:none}
+#autoScrollLabel input{accent-color:#238636;cursor:pointer}
+#lineCount{color:#444;font-size:11px;margin-left:6px}
+</style>
+</head>
+<body>
+<div id="titlebar">
+  <h1>&#128225; FPGA Companion &#8212; WiFi Log Monitor (UDP :7777)</h1>
+  <span id="statusBadge">&#9679; Connecting&#8230;</span>
+</div>
+<div id="terminal"></div>
+<div id="toolbar">
+  <button id="stopBtn" onclick="stopMonitor()">&#9209; Stop</button>
+  <button id="reconnectBtn" onclick="reconnect()" disabled>&#8635; Reconnect</button>
+  <button onclick="clearTerminal()">&#128465; Clear</button>
+  <label id="autoScrollLabel"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+  <span id="lineCount">0 lines</span>
+</div>
+<script>
+var evtSource=null,lineCount=0;
+var terminal=document.getElementById('terminal'),statusBadge=document.getElementById('statusBadge'),
+    autoScrollCbx=document.getElementById('autoScroll'),stopBtn=document.getElementById('stopBtn'),
+    reconnectBtn=document.getElementById('reconnectBtn'),lineCountEl=document.getElementById('lineCount');
+function setStatus(cls,text){statusBadge.textContent=text;statusBadge.className=cls;}
+function scrollBottom(){if(autoScrollCbx.checked)terminal.scrollTop=terminal.scrollHeight;}
+
+// ANSI colour palette (standard + bright foreground/background)
+var ANSI_FG={30:'#4e4e4e',31:'#f85149',32:'#3fb950',33:'#e6a817',34:'#79c0ff',35:'#d2a8ff',36:'#56d4dd',37:'#c8c8c8',
+             90:'#6e7681',91:'#ff7b72',92:'#56d364',93:'#e3b341',94:'#a5d6ff',95:'#f778ba',96:'#76e3ea',97:'#f0f6fc'};
+var ANSI_BG={40:'#1a1a1a',41:'#6e1c1c',42:'#1a3b2a',43:'#3b2d00',44:'#0d2744',45:'#2d1b47',46:'#0d3035',47:'#3a3a3a',
+             100:'#333',101:'#6e1c1c',102:'#1a3b2a',103:'#3b2d00',104:'#0d2744',105:'#2d1b47',106:'#0d3035',107:'#555'};
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function ansiToHtml(text){
+  var result='',bold=false,fg=null,bg=null;
+  var parts=text.split(/\x1b\[([0-9;]*)m/);
+  for(var i=0;i<parts.length;i++){
+    if(i%2===0){
+      if(parts[i]) result+=buildSpan(escHtml(parts[i]),bold,fg,bg);
+    } else {
+      var codes=parts[i]===''?[0]:parts[i].split(';').map(Number);
+      for(var j=0;j<codes.length;j++){
+        var c=codes[j];
+        if(c===0){bold=false;fg=null;bg=null;}
+        else if(c===1){bold=true;}
+        else if(c===22){bold=false;}
+        else if(ANSI_FG[c]!==undefined){fg=ANSI_FG[c];}
+        else if(ANSI_BG[c]!==undefined){bg=ANSI_BG[c];}
+        else if(c===39){fg=null;}
+        else if(c===49){bg=null;}
+      }
+    }
+  }
+  return result;
+}
+
+function buildSpan(html,bold,fg,bg){
+  var style='';
+  if(fg)style+='color:'+fg+';';
+  if(bg)style+='background:'+bg+';';
+  if(bold)style+='font-weight:bold;';
+  if(!style)return html;
+  return '<span style="'+style+'">'+html+'</span>';
+}
+
+function writeLine(text,cls){
+  var el=document.createElement('div');
+  el.className=cls||'log-line';
+  if(cls){el.textContent=text;}else{el.innerHTML=ansiToHtml(text);}
+  terminal.appendChild(el);lineCount++;lineCountEl.textContent=lineCount+' lines';scrollBottom();
+}
+function writeError(text){
+  writeLine('[ERROR] '+text,'error-line');
+  if(text.indexOf('10013')>=0||text.indexOf('access permissions')>=0||text.indexOf('forbidden by its access')>=0){
+    var hint=document.createElement('div');hint.className='hint-box';
+    hint.innerHTML='&#9888; Windows Firewall is blocking UDP port 7777.<br>Run this in an elevated PowerShell to fix it:<br><code class="hint-cmd">netsh advfirewall firewall add rule name="FPGA WiFi Log UDP 7777" dir=in action=allow protocol=UDP localport=7777</code>';
+    terminal.appendChild(hint);scrollBottom();
+  }
+  setStatus('error','\u25CF Error');
+}
+function clearTerminal(){terminal.innerHTML='';lineCount=0;lineCountEl.textContent='0 lines';}
+function stopMonitor(){
+  if(evtSource){evtSource.close();evtSource=null;}
+  setStatus('stopped','\u25CF Stopped');stopBtn.disabled=true;reconnectBtn.disabled=false;
+  writeLine('--- monitoring stopped ---','meta-line');
+}
+function reconnect(){clearTerminal();stopBtn.disabled=false;reconnectBtn.disabled=true;startMonitor();}
+function startMonitor(){
+  setStatus('','\u25CF Connecting\u2026');
+  evtSource=new EventSource('/web/wifi-log/stream');
+  evtSource.onmessage=function(e){
+    try{
+      var msg=JSON.parse(e.data);
+      if(msg.type==='connected'){setStatus('connected','\u25CF '+msg.message);writeLine('--- '+msg.message+' ---','meta-line');}
+      else if(msg.type==='log'){if(msg.text!=='')writeLine(msg.text);}
+      else if(msg.type==='error'){writeError(msg.text);stopMonitor();}
+    }catch(err){writeLine('[parse error] '+e.data,'error-line');}
+  };
+  evtSource.onerror=function(){setStatus('error','\u25CF Connection lost');writeLine('--- connection lost ---','error-line');stopMonitor();};
+}
+startMonitor();
+</script>
+</body>
+</html>
