@@ -2,7 +2,7 @@
 ; Requires Inno Setup 6.0 or later (https://jrsoftware.org/isinfo.php)
 
 #define MyAppName "Papilio Loader"
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.3.1"
 #define MyAppPublisher "Gadget Factory"
 #define MyAppURL "https://github.com/Papilio-Labs/papilio-loader-mcp"
 #define MyAppExeName "PapilioLoader.exe"

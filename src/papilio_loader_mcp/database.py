@@ -91,14 +91,14 @@ def get_saved_files(device_type: Optional[str] = None) -> List[Dict]:
     
     if device_type:
         cursor.execute("""
-            SELECT id, original_filename, device_type, description, file_size, created_at
+            SELECT id, original_filename, stored_filename, device_type, description, file_size, created_at
             FROM saved_files
             WHERE device_type = ?
             ORDER BY created_at DESC
         """, (device_type,))
     else:
         cursor.execute("""
-            SELECT id, original_filename, device_type, description, file_size, created_at
+            SELECT id, original_filename, stored_filename, device_type, description, file_size, created_at
             FROM saved_files
             ORDER BY created_at DESC
         """)
