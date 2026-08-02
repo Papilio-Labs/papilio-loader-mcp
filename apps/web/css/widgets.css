@@ -33,6 +33,12 @@
   color: var(--text);
 }
 
+.flash-banner-info {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--text);
+}
+
 .flash-log-wrap {
   margin-bottom: 1.5rem;
   border: 1px solid var(--border);
