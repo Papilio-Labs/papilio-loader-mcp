@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           git config user.name "papilio-loader-mcp-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -A -- getting-started loader flash css
+          git add -A -- getting-started loader css
           if git diff --cached --quiet; then
             echo "No changes to getting-started/, loader/, or css/ — nothing to sync."
             exit 0
