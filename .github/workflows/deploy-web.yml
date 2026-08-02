@@ -1,0 +1,65 @@
+name: Deploy web build to papilioworks.com
+
+# Builds apps/web (esbuild bundles of flash/ and loader/) and syncs the output
+# into the Papilio-Works/papilioworks.com repo's flash/ and loader/ directories.
+# That repo auto-deploys to the live site (HostGator via rsync) on every push
+# to its own main branch, so this workflow's push is what actually goes live.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "packages/flasher-core/**"
+      - "packages/loader-ui/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout papilio-loader-mcp
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build flasher-core
+        run: npm run build --workspace=packages/flasher-core
+
+      - name: Build apps/web
+        run: npm run build --workspace=apps/web
+
+      - name: Checkout papilioworks.com
+        uses: actions/checkout@v4
+        with:
+          repository: Papilio-Works/papilioworks.com
+          token: ${{ secrets.PAPILIOWORKS_DEPLOY_TOKEN }}
+          path: papilioworks.com
+
+      - name: Sync flash/ and loader/ into papilioworks.com
+        run: |
+          set -euo pipefail
+          rsync -a --delete apps/web/flash/ papilioworks.com/flash/
+          rsync -a --delete apps/web/loader/ papilioworks.com/loader/
+
+      - name: Commit and push if changed
+        working-directory: papilioworks.com
+        run: |
+          set -euo pipefail
+          git config user.name "papilio-loader-mcp-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A -- flash loader
+          if git diff --cached --quiet; then
+            echo "No changes to flash/ or loader/ — nothing to sync."
+            exit 0
+          fi
+          git commit -m "flash+loader: sync web build from papilio-loader-mcp@${GITHUB_SHA::7}"
+          git push
