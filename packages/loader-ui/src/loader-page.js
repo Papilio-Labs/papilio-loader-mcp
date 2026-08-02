@@ -67,7 +67,15 @@ export function initLoaderPage(doc = document, win = window) {
     lanScanResults: doc.getElementById("lan-scan-results"),
     wifiLogNote: doc.getElementById("wifi-log-note"),
     wifiLogPanel: doc.getElementById("wifi-log-panel"),
+
+    appVersion: doc.getElementById("app-version"),
   };
+
+  // __LOADER_VERSION__ is replaced at build time (see apps/web/build.mjs);
+  // fall back gracefully if this page is ever loaded unbundled.
+  if (els.appVersion) {
+    els.appVersion.textContent = `v${typeof __LOADER_VERSION__ !== "undefined" ? __LOADER_VERSION__ : "dev"}`;
+  }
 
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();

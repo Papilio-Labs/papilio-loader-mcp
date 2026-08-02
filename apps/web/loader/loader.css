@@ -140,6 +140,13 @@
   font-size: 1.05rem;
 }
 
+.loader-version {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 1rem;
+}
+
 .status-log {
   background: var(--bg);
   border: 1px solid var(--border);

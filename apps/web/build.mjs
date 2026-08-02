@@ -4,6 +4,10 @@
 // static output that can be served by any static file host (matches
 // papilioworks.com's existing GitHub Pages deploy).
 import { build, context } from "esbuild";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const { version } = JSON.parse(readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf8"));
 
 const shared = {
   bundle: true,
@@ -11,6 +15,7 @@ const shared = {
   target: "es2022",
   sourcemap: true,
   logLevel: "info",
+  define: { __LOADER_VERSION__: JSON.stringify(version) },
 };
 
 const entries = [

@@ -9533,8 +9533,12 @@ function initLoaderPage(doc = document, win = window) {
     btnLanScan: doc.getElementById("btn-lan-scan"),
     lanScanResults: doc.getElementById("lan-scan-results"),
     wifiLogNote: doc.getElementById("wifi-log-note"),
-    wifiLogPanel: doc.getElementById("wifi-log-panel")
+    wifiLogPanel: doc.getElementById("wifi-log-panel"),
+    appVersion: doc.getElementById("app-version")
   };
+  if (els.appVersion) {
+    els.appVersion.textContent = `v${true ? "0.1.0" : "dev"}`;
+  }
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
   let serialPort = null;
