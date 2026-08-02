@@ -195,11 +195,28 @@ export function initLoaderPage(doc = document, win = window) {
       // This board has no external reset circuit, so make it reprint its
       // boot log (with its IP) by resetting it ourselves instead of asking
       // the user to find and press the physical RESET button.
+      //
+      // Unlike sendWifiCredentials() (which writes over an already-running
+      // reader, so the reset it triggers is naturally caught by that
+      // reader's own read loop dying -> onDisconnect() -> awaitingReconnect
+      // = true), resetEsp32ForIp() opens its own esptool-js Transport
+      // directly on the port instead of going through our SerialLineReader
+      // (which isn't running yet at this point) -- so there's no live read
+      // loop to notice the reset-induced USB re-enumeration. Flip the flag
+      // ourselves so the navigator.serial "connect" listener still adopts
+      // the board's new port object once it reappears, instead of the code
+      // below retrying against the stale, now-disconnected one until it
+      // times out.
+      awaitingReconnect = true;
       setStatus(els.statusConnect, "Resetting board to read its IP\u2026");
       await resetEsp32ForIp(serialPort, (msg) => log(msg));
       setStatus(els.statusConnect, "Listening on USB \u2014 waiting for the board to report its IP\u2026");
+      // Fallback/no-op: if the "connect" event above has already fired and
+      // started a fresh reader, this sees reader.isRunning === true and
+      // returns immediately; otherwise it's the one that actually starts it.
       startSerialListenerWithRetry().catch((err) => log(`Serial listener failed to start: ${err.message}`, "error"));
     } catch (err) {
+      awaitingReconnect = false;
       log(`Find IP failed: ${err.message}`, "error");
       setStatus(els.statusConnect, `Find IP failed: ${err.message}`, "error");
     } finally {

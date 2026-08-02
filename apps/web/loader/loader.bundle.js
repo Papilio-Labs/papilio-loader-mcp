@@ -9635,11 +9635,13 @@ function initLoaderPage(doc = document, win = window) {
         els.btnUsbHostHold.disabled = false;
         els.btnUsbHostResume.disabled = false;
       }
+      awaitingReconnect = true;
       setStatus(els.statusConnect, "Resetting board to read its IP\u2026");
       await resetEsp32ForIp(serialPort, (msg) => log(msg));
       setStatus(els.statusConnect, "Listening on USB \u2014 waiting for the board to report its IP\u2026");
       startSerialListenerWithRetry().catch((err2) => log(`Serial listener failed to start: ${err2.message}`, "error"));
     } catch (err2) {
+      awaitingReconnect = false;
       log(`Find IP failed: ${err2.message}`, "error");
       setStatus(els.statusConnect, `Find IP failed: ${err2.message}`, "error");
     } finally {
