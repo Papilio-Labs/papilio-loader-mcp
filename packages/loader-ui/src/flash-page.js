@@ -20,6 +20,8 @@ export function initFlashPage(doc = document) {
 
     esp32File: doc.getElementById("esp32-file"),
     esp32FileLabel: doc.getElementById("esp32-file-label"),
+    esp32BundledVersion: doc.getElementById("esp32-bundled-version"),
+    esp32Advanced: doc.getElementById("esp32-advanced"),
     btnConnect: doc.getElementById("btn-connect"),
     btnFlashEsp32: doc.getElementById("btn-flash-esp32"),
     progressEsp32: doc.getElementById("progress-esp32"),
@@ -49,6 +51,11 @@ export function initFlashPage(doc = document) {
   let reader = null;
   let deviceIp = null;
   let awaitingReconnect = false;
+  // Bundled firmware manifest (same-origin firmware/manifest.json, written by
+  // scripts/fetch-latest-firmware.mjs during the deploy build). Lets Step 1
+  // flash the latest official release with no manual download — falls back
+  // to the file picker below if the manifest can't be fetched.
+  let bundledFirmware = null; // { version, fileName } once fetched
 
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
@@ -56,6 +63,25 @@ export function initFlashPage(doc = document) {
       (btn) => (btn.disabled = true)
     );
     return;
+  }
+
+  if (els.esp32BundledVersion) {
+    fetch("firmware/manifest.json")
+      .then((resp) => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return resp.json();
+      })
+      .then((manifest) => {
+        bundledFirmware = manifest;
+        els.esp32BundledVersion.textContent = manifest.version;
+        updateFlashEsp32Enabled();
+      })
+      .catch((err) => {
+        log(`Bundled firmware unavailable (${err.message}) — use "different firmware file" below.`);
+        els.esp32BundledVersion.textContent = "unavailable";
+        if (els.esp32Advanced) els.esp32Advanced.open = true;
+        updateFlashEsp32Enabled();
+      });
   }
 
   // A chip-level reset on native ESP32-S3 USB Serial/JTAG resets the USB
@@ -119,7 +145,8 @@ export function initFlashPage(doc = document) {
   els.fpgaTarget.addEventListener("change", updateFlashFpgaEnabled);
 
   function updateFlashEsp32Enabled() {
-    els.btnFlashEsp32.disabled = !(serialPort && els.esp32File.files[0]);
+    const hasFirmware = Boolean(els.esp32File.files[0]) || Boolean(bundledFirmware);
+    els.btnFlashEsp32.disabled = !(serialPort && hasFirmware);
   }
 
   function updateFlashFpgaEnabled() {
@@ -150,7 +177,11 @@ export function initFlashPage(doc = document) {
       reader = new SerialLineReader(serialPort);
       wireReaderEvents();
       log("Serial port selected.");
-      setStatus(els.statusEsp32, "USB connected. Choose a firmware file, then flash.", "ok");
+      setStatus(
+        els.statusEsp32,
+        bundledFirmware ? "USB connected. Ready to flash." : "USB connected. Choose a firmware file, then flash.",
+        "ok"
+      );
       updateFlashEsp32Enabled();
     } catch (err) {
       log(`Connect failed: ${err.message}`);
@@ -159,16 +190,24 @@ export function initFlashPage(doc = document) {
   });
 
   els.btnFlashEsp32.addEventListener("click", async () => {
-    const file = els.esp32File.files[0];
-    if (!serialPort || !file) return;
+    const customFile = els.esp32File.files[0];
+    if (!serialPort || !(customFile || bundledFirmware)) return;
 
     els.btnFlashEsp32.disabled = true;
     els.btnConnect.disabled = true;
     els.progressEsp32.hidden = false;
-    setStatus(els.statusEsp32, "Connecting to ESP32…");
+    setStatus(els.statusEsp32, customFile ? "Connecting to ESP32…" : `Downloading bundled firmware ${bundledFirmware.version}…`);
 
     try {
-      const data = new Uint8Array(await file.arrayBuffer());
+      let data;
+      if (customFile) {
+        data = new Uint8Array(await customFile.arrayBuffer());
+      } else {
+        const resp = await fetch(`firmware/${bundledFirmware.fileName}`);
+        if (!resp.ok) throw new Error(`Firmware download failed (HTTP ${resp.status})`);
+        data = new Uint8Array(await resp.arrayBuffer());
+        setStatus(els.statusEsp32, "Connecting to ESP32…");
+      }
       await flashEsp32(serialPort, data, {
         onLog: log,
         onProgress: (written, total) => {

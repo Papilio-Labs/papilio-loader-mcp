@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flash Your Board — Papilio Works</title>
-  <meta name="description" content="Flash Papilio Retrocade firmware and FPGA cores directly from your browser — no software to install. Chrome or Edge required.">
+  <title>Getting Started — Set Up a Blank Papilio Retrocade — Papilio Works</title>
+  <meta name="description" content="First-time setup for a brand-new Papilio Retrocade board, done entirely from your browser — no software to install. Chrome or Edge required.">
   <link rel="stylesheet" href="../css/style.css">
-  <link rel="stylesheet" href="flash.css">
+  <link rel="stylesheet" href="../css/widgets.css">
 </head>
 <body>
 
@@ -18,7 +18,7 @@
         <li><a href="../#features">Features</a></li>
         <li><a href="../#cores">Cores</a></li>
         <li><a href="../docs/">Docs</a></li>
-        <li><a href="./" class="accent">Flash</a></li>
+        <li><a href="./" class="accent">Getting Started</a></li>
         <li><a href="../loader/">Loader</a></li>
       </ul>
     </nav>
@@ -27,15 +27,17 @@
   <main class="container flash-page">
     <div class="flash-intro">
       <div class="hero-eyebrow">Hosted Web Flasher</div>
-      <h1 class="section-title">Flash Your Papilio Retrocade</h1>
+      <h1 class="section-title">Getting Started With a Blank Board</h1>
       <p class="section-sub">
-        Everything happens in this browser tab over USB and your home WiFi.
-        Nothing is installed on your computer, and your WiFi credentials never
-        leave your machine except to the board itself.
+        <strong>Use this page once</strong> — the first time you set up a brand-new,
+        never-flashed Papilio Retrocade. Everything happens in this browser tab over
+        USB and your home WiFi. Nothing is installed on your computer, and your WiFi
+        credentials never leave your machine except to the board itself.
       </p>
       <p class="section-sub">
-        Already set up and want JTAG SRAM, recovery mode, or OTA firmware updates?
-        Try the <a href="../loader/">full Papilio Loader — Web Edition</a>.
+        <strong>Already set up?</strong> Come back here only to re-flash a board back
+        to a blank state. For everyday use — JTAG SRAM, recovery mode, or OTA firmware
+        updates — use the <a href="../loader/">full Papilio Loader — Web Edition</a> instead.
       </p>
     </div>
 
@@ -58,21 +60,26 @@
         <h2>Flash ESP32 Firmware (USB)</h2>
       </div>
       <p class="flash-step-desc">
-        Download the latest <strong>-merged.bin</strong> from the
-        <a href="https://github.com/Papilio-Retrocade/FPGA-Companion/releases" target="_blank" rel="noopener">FPGA-Companion releases page</a>,
-        plug your board in over USB, then flash. The merged image contains the bootloader, partition
-        table, and app in one file — do not use the plain <code>fpga_companion.bin</code> from the release zip here.
-        The board reboots itself automatically once flashing finishes — no button press needed.
+        We've bundled the latest official FPGA-Companion release
+        (<strong id="esp32-bundled-version">checking&hellip;</strong>) right here — just plug
+        your board in over USB and flash, no download needed. The board reboots itself
+        automatically once flashing finishes — no button press needed.
       </p>
 
       <div class="flash-row">
-        <label class="file-picker">
-          <input type="file" id="esp32-file" accept=".bin">
-          <span id="esp32-file-label">Choose *-merged.bin&hellip;</span>
-        </label>
         <button id="btn-connect" class="btn btn-outline">Connect USB</button>
-        <button id="btn-flash-esp32" class="btn btn-primary" disabled>Flash ESP32</button>
+        <button id="btn-flash-esp32" class="btn btn-primary" disabled>Flash ESP32 (latest)</button>
       </div>
+
+      <details class="flash-advanced" id="esp32-advanced">
+        <summary>Use a different firmware file instead</summary>
+        <div class="flash-row">
+          <label class="file-picker">
+            <input type="file" id="esp32-file" accept=".bin">
+            <span id="esp32-file-label">Choose *-merged.bin&hellip;</span>
+          </label>
+        </div>
+      </details>
 
       <div class="progress" id="progress-esp32" hidden>
         <div class="progress-bar" style="width:0%"></div>
@@ -142,6 +149,6 @@
     </section>
   </main>
 
-  <script type="module" src="flash.bundle.js"></script>
+  <script type="module" src="getting-started.bundle.js"></script>
 </body>
 </html>

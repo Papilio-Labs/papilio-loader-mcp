@@ -9421,6 +9421,8 @@ function initFlashPage(doc = document) {
     log: doc.getElementById("flash-log"),
     esp32File: doc.getElementById("esp32-file"),
     esp32FileLabel: doc.getElementById("esp32-file-label"),
+    esp32BundledVersion: doc.getElementById("esp32-bundled-version"),
+    esp32Advanced: doc.getElementById("esp32-advanced"),
     btnConnect: doc.getElementById("btn-connect"),
     btnFlashEsp32: doc.getElementById("btn-flash-esp32"),
     progressEsp32: doc.getElementById("progress-esp32"),
@@ -9446,12 +9448,28 @@ function initFlashPage(doc = document) {
   let reader = null;
   let deviceIp = null;
   let awaitingReconnect = false;
+  let bundledFirmware = null;
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
     [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFindIp].forEach(
       (btn) => btn.disabled = true
     );
     return;
+  }
+  if (els.esp32BundledVersion) {
+    fetch("firmware/manifest.json").then((resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return resp.json();
+    }).then((manifest) => {
+      bundledFirmware = manifest;
+      els.esp32BundledVersion.textContent = manifest.version;
+      updateFlashEsp32Enabled();
+    }).catch((err2) => {
+      log(`Bundled firmware unavailable (${err2.message}) \u2014 use "different firmware file" below.`);
+      els.esp32BundledVersion.textContent = "unavailable";
+      if (els.esp32Advanced) els.esp32Advanced.open = true;
+      updateFlashEsp32Enabled();
+    });
   }
   navigator.serial.addEventListener("connect", (event) => {
     if (!awaitingReconnect) return;
@@ -9498,7 +9516,8 @@ function initFlashPage(doc = document) {
   });
   els.fpgaTarget.addEventListener("change", updateFlashFpgaEnabled);
   function updateFlashEsp32Enabled() {
-    els.btnFlashEsp32.disabled = !(serialPort && els.esp32File.files[0]);
+    const hasFirmware = Boolean(els.esp32File.files[0]) || Boolean(bundledFirmware);
+    els.btnFlashEsp32.disabled = !(serialPort && hasFirmware);
   }
   function updateFlashFpgaEnabled() {
     const isRecovery = els.fpgaTarget.value === "/fpga-recover";
@@ -9519,7 +9538,11 @@ function initFlashPage(doc = document) {
       reader = new SerialLineReader(serialPort);
       wireReaderEvents();
       log("Serial port selected.");
-      setStatus(els.statusEsp32, "USB connected. Choose a firmware file, then flash.", "ok");
+      setStatus(
+        els.statusEsp32,
+        bundledFirmware ? "USB connected. Ready to flash." : "USB connected. Choose a firmware file, then flash.",
+        "ok"
+      );
       updateFlashEsp32Enabled();
     } catch (err2) {
       log(`Connect failed: ${err2.message}`);
@@ -9527,14 +9550,22 @@ function initFlashPage(doc = document) {
     }
   });
   els.btnFlashEsp32.addEventListener("click", async () => {
-    const file = els.esp32File.files[0];
-    if (!serialPort || !file) return;
+    const customFile = els.esp32File.files[0];
+    if (!serialPort || !(customFile || bundledFirmware)) return;
     els.btnFlashEsp32.disabled = true;
     els.btnConnect.disabled = true;
     els.progressEsp32.hidden = false;
-    setStatus(els.statusEsp32, "Connecting to ESP32\u2026");
+    setStatus(els.statusEsp32, customFile ? "Connecting to ESP32\u2026" : `Downloading bundled firmware ${bundledFirmware.version}\u2026`);
     try {
-      const data = new Uint8Array(await file.arrayBuffer());
+      let data;
+      if (customFile) {
+        data = new Uint8Array(await customFile.arrayBuffer());
+      } else {
+        const resp = await fetch(`firmware/${bundledFirmware.fileName}`);
+        if (!resp.ok) throw new Error(`Firmware download failed (HTTP ${resp.status})`);
+        data = new Uint8Array(await resp.arrayBuffer());
+        setStatus(els.statusEsp32, "Connecting to ESP32\u2026");
+      }
       await flashEsp32(serialPort, data, {
         onLog: log,
         onProgress: (written, total) => {
@@ -9663,11 +9694,11 @@ function initFlashPage(doc = document) {
   });
 }
 
-// src/flash-entry.js
+// src/getting-started-entry.js
 initFlashPage();
 /*! Bundled license information:
 
 pako/dist/pako.esm.mjs:
   (*! pako 2.2.0 https://github.com/nodeca/pako @license (MIT AND Zlib) *)
 */
-//# sourceMappingURL=flash.bundle.js.map
+//# sourceMappingURL=getting-started.bundle.js.map

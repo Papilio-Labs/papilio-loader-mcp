@@ -69,6 +69,20 @@
   margin-bottom: 1.5rem;
 }
 
+.flash-advanced {
+  margin: 0.75rem 0 1rem;
+}
+
+.flash-advanced summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.flash-advanced .flash-row {
+  margin-top: 0.75rem;
+}
+
 .flash-step-header {
   display: flex;
   align-items: center;
