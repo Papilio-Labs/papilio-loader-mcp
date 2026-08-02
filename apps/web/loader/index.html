@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Papilio Loader — Web Edition — Papilio Works</title>
+  <meta name="description" content="The full Papilio Loader Device Flash Manager, running entirely in your browser — USB/Serial and OTA/WiFi flashing for FPGA and ESP32, no install required.">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../flash/flash.css">
+  <link rel="stylesheet" href="loader.css">
+</head>
+<body>
+
+  <!-- NAV -->
+  <header class="site-header">
+    <nav class="nav container">
+      <a href="../" class="nav-logo">Papilio<span class="accent">Works</span></a>
+      <ul class="nav-links">
+        <li><a href="../#features">Features</a></li>
+        <li><a href="../#cores">Cores</a></li>
+        <li><a href="../docs/">Docs</a></li>
+        <li><a href="../flash/">Flash</a></li>
+        <li><a href="./" class="accent">Loader</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container loader-page">
+    <div class="flash-intro">
+      <div class="hero-eyebrow">Web Edition</div>
+      <h1 class="section-title">Papilio Loader — Device Flash Manager</h1>
+      <p class="section-sub">
+        The same USB/Serial + OTA/WiFi flashing the
+        <a href="https://github.com/Papilio-Labs/papilio-loader-mcp" target="_blank" rel="noopener">Papilio Loader desktop app</a>
+        does, running entirely in this browser tab via WebSerial and direct network requests —
+        nothing installed. First time setting up a board?
+        The <a href="../flash/">guided Flash page</a> is a gentler start.
+      </p>
+    </div>
+
+    <!-- Unsupported browser banner -->
+    <div id="unsupported-banner" class="flash-banner flash-banner-warn" hidden>
+      <strong>WebSerial isn't available in this browser.</strong>
+      Open this page in <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> (desktop) over HTTPS.
+    </div>
+
+    <!-- CONNECT & LOCATE DEVICE -->
+    <section class="flash-step" id="step-connect">
+      <div class="flash-step-header">
+        <h2>Connect &amp; Locate Device</h2>
+      </div>
+      <p class="flash-step-desc">
+        Connect over USB for first-time setup or USB/Serial flashing. For OTA/WiFi flashing, the
+        board needs its IP address — there's no browser-side network scan (like the desktop app's
+        <em>Discover Devices</em>), so use <strong>Find My IP</strong> instead: it resets the board
+        over USB and reads the IP it reports on boot, no physical RESET button press needed.
+      </p>
+
+      <div class="flash-row">
+        <button id="btn-connect" class="btn btn-outline">Connect USB</button>
+        <button id="btn-find-ip" class="btn btn-outline">Find My IP</button>
+        <button id="btn-lan-scan" class="btn btn-outline" hidden>Scan LAN for Devices</button>
+      </div>
+      <div id="lan-scan-results" class="flash-row"></div>
+      <p class="flash-status" id="status-connect"></p>
+
+      <div class="flash-row">
+        <input type="text" id="wifi-ssid" placeholder="WiFi network name (SSID)" autocomplete="off">
+        <input type="password" id="wifi-pass" placeholder="WiFi password" autocomplete="off">
+        <button id="btn-send-wifi" class="btn btn-outline" disabled>Send WiFi Credentials</button>
+      </div>
+
+      <div class="flash-row">
+        <span class="flash-ip-label">Device IP:</span>
+        <strong id="device-ip">unknown</strong>
+        <input type="text" id="device-ip-manual" placeholder="or enter IP manually, e.g. 192.168.1.42">
+        <button id="btn-use-manual-ip" class="btn btn-outline">Use This IP</button>
+      </div>
+
+      <p class="card-note">
+        This board switches to USB Host mode (for game controllers) a few seconds after boot,
+        which disconnects the serial console. <strong>Hold USB Console</strong> saves a flag on
+        the board (persists across reboots) that keeps the console alive instead;
+        <strong>Resume USB Host</strong> clears it and brings USB Host mode up immediately.
+      </p>
+      <div class="flash-row">
+        <button id="btn-usb-host-hold" class="btn btn-outline" disabled>Hold USB Console</button>
+        <button id="btn-usb-host-resume" class="btn btn-outline" disabled>Resume USB Host</button>
+      </div>
+      <p class="flash-status" id="status-usb-host"></p>
+    </section>
+
+    <!-- CARDS -->
+    <div class="loader-cards">
+
+      <!-- FPGA CARD -->
+      <section class="loader-card" id="card-fpga">
+        <h2>📟 FPGA Flash (Gowin)</h2>
+
+        <div class="method-group" role="radiogroup" aria-label="FPGA flash method">
+          <label class="method-option">
+            <input type="radio" name="fpga-method" value="ota" checked>
+            <span>📡 OTA (WiFi)</span>
+          </label>
+          <label class="method-option">
+            <input type="radio" name="fpga-method" value="usb">
+            <span>🔌 USB/Serial</span>
+          </label>
+        </div>
+
+        <p class="card-note">
+          No published core bitstream releases yet — upload a Gowin headerless <strong>.bin</strong>
+          (&quot;Binary File&quot; export) from your own build.
+        </p>
+
+        <label class="file-picker">
+          <input type="file" id="fpga-file" accept=".bin">
+          <span id="fpga-file-label">Choose bitstream .bin&hellip;</span>
+        </label>
+
+        <details class="adv-details">
+          <summary>⚙️ Advanced Options</summary>
+          <div class="flash-row">
+            <label class="adv-label" for="fpga-target">Target</label>
+            <select id="fpga-target">
+              <option value="/fpga-update">SPI Flash (persistent)</option>
+              <option value="/fpga-jtag-sram">JTAG SRAM (fast, volatile)</option>
+              <option value="/fpga-recover">Recovery (erase bitstream region, OTA only)</option>
+            </select>
+          </div>
+        </details>
+
+        <button id="btn-flash-fpga" class="btn btn-primary" disabled>⚡ Flash FPGA</button>
+        <div class="progress" id="progress-fpga" hidden>
+          <div class="progress-bar" style="width:0%"></div>
+        </div>
+        <p class="flash-status" id="status-fpga"></p>
+      </section>
+
+      <!-- ESP32 CARD -->
+      <section class="loader-card" id="card-esp32">
+        <h2>🔧 ESP32 Flash (FPGA-Companion)</h2>
+
+        <div class="method-group" role="radiogroup" aria-label="ESP32 flash method">
+          <label class="method-option">
+            <input type="radio" name="esp32-method" value="usb" checked>
+            <span>🔌 USB/Serial</span>
+          </label>
+          <label class="method-option">
+            <input type="radio" name="esp32-method" value="ota">
+            <span>📡 OTA (WiFi)</span>
+          </label>
+        </div>
+        <p class="card-note">
+          OTA firmware updates only work once a board is already running FPGA-Companion — a
+          brand-new board needs USB/Serial the first time.
+        </p>
+
+        <div class="source-group" role="radiogroup" aria-label="ESP32 firmware source">
+          <label class="method-option">
+            <input type="radio" name="esp32-source" value="upload" checked>
+            <span>📁 Upload my own</span>
+          </label>
+          <label class="method-option">
+            <input type="radio" name="esp32-source" value="release">
+            <span>☁️ Try latest official release</span>
+          </label>
+        </div>
+
+        <div id="esp32-release-fields" hidden>
+          <button id="btn-fetch-release" class="btn btn-outline" type="button">Fetch Latest Release</button>
+          <span id="esp32-release-label">not fetched yet — GitHub's CDN often blocks this from a browser (CORS); fall back to "Upload my own" if it fails</span>
+        </div>
+        <label class="file-picker" id="esp32-upload-fields">
+          <input type="file" id="esp32-file" accept=".bin">
+          <span id="esp32-file-label">Choose *-merged.bin&hellip;</span>
+        </label>
+
+        <button id="btn-flash-esp32" class="btn btn-primary" disabled>⚡ Flash ESP32</button>
+        <div class="progress" id="progress-esp32" hidden>
+          <div class="progress-bar" style="width:0%"></div>
+        </div>
+        <p class="flash-status" id="status-esp32"></p>
+      </section>
+
+    </div>
+
+    <!-- STATUS LOG -->
+    <section class="status-log-section">
+      <div class="status-log-header">
+        <h2>Status Log</h2>
+        <button id="btn-clear-log" class="btn btn-outline">🗑️ Clear Log</button>
+      </div>
+      <div id="loader-log" class="status-log" aria-live="polite"></div>
+    </section>
+
+    <div class="flash-banner" id="wifi-log-note" hidden>
+      <strong>No WiFi Log Monitor here.</strong> The desktop app's live UDP log viewer (port 7777)
+      needs a raw network socket browsers can't open. Use the connection above (USB/Serial) for
+      live boot/debug output instead, or run the
+      <a href="https://github.com/Papilio-Labs/papilio-loader-mcp" target="_blank" rel="noopener">desktop app</a>
+      locally for the WiFi log monitor.
+    </div>
+
+    <section class="status-log-section" id="wifi-log-panel" hidden>
+      <div class="status-log-header">
+        <h2>WiFi Log Monitor (UDP 7777)</h2>
+      </div>
+      <div id="wifi-log-output" class="status-log" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script type="module" src="loader.bundle.js"></script>
+</body>
+</html>

@@ -71,7 +71,13 @@ async def flash_fpga_device(port: str, file_path: str, address: str = "0x100000"
         if port and port.upper() != "AUTO":
             cmd.extend(["--port", port])
         
+        # --before usb-reset / --after watchdog-reset: the only reset combo
+        # confirmed reliable on native-USB ESP32-S3 boards (Papilio Retrocade) -
+        # the default DTR/RTS-based reset leaves the board requiring a manual
+        # physical reset. See esp32s3-usb-auto-reset-findings memory notes.
         cmd.extend([
+            "--before", "usb-reset",
+            "--after", "watchdog-reset",
             "write-flash",
             address if address else "0x100000",
             str(file_path_obj)

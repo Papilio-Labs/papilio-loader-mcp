@@ -73,7 +73,13 @@ async def flash_esp_device(
         if port and port.upper() != "AUTO":
             cmd.extend(["--port", port])
         
+        # --before usb-reset / --after watchdog-reset: the only reset combo
+        # confirmed reliable on native-USB ESP32-S3 boards (Papilio Retrocade) -
+        # the default DTR/RTS-based reset leaves the board requiring a manual
+        # physical reset. See esp32s3-usb-auto-reset-findings memory notes.
         cmd.extend([
+            "--before", "usb-reset",
+            "--after", "watchdog-reset",
             "write-flash",
             address,
             str(file_path_obj)
@@ -153,6 +159,8 @@ async def flash_esp_multi_partition(
         if port and port.upper() != "AUTO":
             cmd.extend(["--port", port])
         
+        # --before usb-reset / --after watchdog-reset: see flash_esp_device above.
+        cmd.extend(["--before", "usb-reset", "--after", "watchdog-reset"])
         cmd.append("write-flash")  # Use non-deprecated command name
         
         if verify:

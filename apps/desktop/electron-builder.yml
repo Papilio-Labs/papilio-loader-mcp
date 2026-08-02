@@ -1,0 +1,40 @@
+# electron-builder.yml — packaging config for the Papilio Loader desktop app.
+# NSIS installer on Windows (matches the existing PyInstaller/Inno Setup
+# installer's target audience), targets that don't need code signing set up
+# yet (left for a follow-up once a cert is available).
+appId: com.papiliolabs.papilioloader
+productName: Papilio Loader
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - "!**/*.map"
+# `files` only packages paths inside this appDir (apps/desktop) — apps/web
+# lives one level up, so it has to be copied in as an extra resource instead
+# (see main/index.ts's WEB_ROOT, which looks for it under resourcesPath/web
+# when app.isPackaged). packages/flasher-core is NOT needed here: build.mjs
+# bundles it directly into dist/main, dist/preload, and dist/bin already.
+extraResources:
+  - from: ../web
+    to: web
+  - from: build/tray.png
+    to: icons/tray.png
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+mac:
+  target: dmg
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+linux:
+  target: AppImage
+  icon: build/icon.png
+  category: Development

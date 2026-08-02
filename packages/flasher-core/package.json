@@ -1,0 +1,23 @@
+{
+  "name": "@papilio-loader/flasher-core",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Transport-agnostic core flashing logic for Papilio boards: WebSerial, ESP32 (esptool-js), FPGA serial protocol, HTTP OTA, WiFi provisioning. Zero DOM dependencies outside of browser-specific adapter files.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "esptool-js": "0.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.10"
+  }
+}

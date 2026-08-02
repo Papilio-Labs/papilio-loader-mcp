@@ -1,0 +1,171 @@
+/* ============================================================
+   Papilio Works — loader.css (Loader Web Edition)
+   Reuses flash.css's tokens/classes (.flash-step, .flash-row, .btn, etc.)
+   ============================================================ */
+
+.loader-page {
+  padding: 48px 24px 96px;
+  max-width: 1140px;
+}
+
+/* class-based display rules below win specificity ties against the [hidden]
+   UA-stylesheet rule, so force it explicitly. */
+.loader-page [hidden] {
+  display: none !important;
+}
+
+.loader-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.loader-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.loader-card h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.method-group,
+.source-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 0.75rem;
+}
+
+.method-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--bg-alt);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.method-option:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-dim);
+}
+
+.method-option input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+.card-note {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.adv-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-alt);
+  margin: 0.75rem 0;
+}
+
+.adv-details summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.adv-details[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.adv-details .flash-row {
+  padding: 10px 12px;
+  margin-bottom: 0;
+}
+
+.adv-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex: 0 0 auto;
+}
+
+.loader-card .file-picker {
+  display: flex;
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.loader-card .btn-primary {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+#esp32-release-fields {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.status-log-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin-bottom: 1.5rem;
+}
+
+.status-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.status-log-header h2 {
+  font-size: 1.05rem;
+}
+
+.status-log {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.status-log .log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 2px;
+}
+
+.status-log .log-info { color: var(--text-muted); }
+.status-log .log-success { color: var(--accent); font-weight: 600; }
+.status-log .log-error { color: #ff6b6b; font-weight: 600; }
+.status-log .log-command { color: #b892ff; }
+
+#wifi-log-note {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

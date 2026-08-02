@@ -1,0 +1,15 @@
+{
+  "name": "@papilio-loader/loader-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The single Papilio Loader UI (guided flash page + full loader page), built on @papilio-loader/flasher-core. Vanilla ES modules, no framework, no build-step required to run — bundled by apps/web for the static deploy.",
+  "type": "module",
+  "exports": {
+    "./flash-page.js": "./src/flash-page.js",
+    "./loader-page.js": "./src/loader-page.js",
+    "./dom.js": "./src/dom.js"
+  },
+  "dependencies": {
+    "@papilio-loader/flasher-core": "*"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@papilio-loader/web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Static web build of the Papilio Loader UI (guided flash page + full loader page), bundled with esbuild for deployment to papilioworks.com.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "serve": "node ../../scripts/serve-static.mjs ."
+  },
+  "dependencies": {
+    "@papilio-loader/loader-ui": "*",
+    "@papilio-loader/flasher-core": "*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
