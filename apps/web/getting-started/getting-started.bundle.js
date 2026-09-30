@@ -2313,8 +2313,8 @@ async function sendWifiCredentials(port, ssid, pass) {
 
 // ../../packages/flasher-core/dist/fpga-serial.js
 var SERIAL_FPGA_TARGET = {
-  "/fpga-update": "flash",
-  "/fpga-jtag-sram": "sram"
+  "/fpga-jtag-sram": "sram",
+  "/fpga-update": "flash"
 };
 async function flashFpgaOverSerial(port, reader, target, data, onProgress) {
   if (!port)
@@ -9442,6 +9442,7 @@ function initFlashPage(doc = document) {
     progressFpga: doc.getElementById("progress-fpga"),
     statusFpga: doc.getElementById("status-fpga")
   };
+  if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
   let serialPort = null;

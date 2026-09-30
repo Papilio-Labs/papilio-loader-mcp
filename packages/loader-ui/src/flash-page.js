@@ -44,6 +44,8 @@ export function initFlashPage(doc = document) {
     statusFpga: doc.getElementById("status-fpga"),
   };
 
+  if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
+
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
 

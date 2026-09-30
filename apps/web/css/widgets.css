@@ -231,3 +231,12 @@
   font-family: var(--font-mono);
   color: var(--accent);
 }
+
+#device-role {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+#device-role.is-error { color: #ff6b6b; }
+#device-role.is-ok { color: var(--accent); }

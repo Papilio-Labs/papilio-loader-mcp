@@ -1,0 +1,48 @@
+// device-status.ts — classify what firmware a board is running, so host
+// tooling can decide between the 3 recovery outcomes Phase 7 of
+// papilio-works/plans/2026-09-21-papilio-esp-bootloader.md calls for:
+//   - "boot log shows loader already" -> just needed the USB-reset nudge.
+//   - "boot log shows old 2-slot firmware" -> needs the Phase 8 migration
+//     merged-image (not implemented yet, this module only detects it).
+//   - "no boot log at all" -> blank/unresponsive board, needs a full flash.
+//
+// Detection is based on fixed banner text both firmwares already print
+// (papilio-esp-bootloader's main.c, FPGA-Companion's mcu_hw.c) plus one
+// route (`POST /goto-loader`) that only exists on post-Phase-6
+// FPGA-Companion builds -- pre-Phase-6 builds never had net_recovery.c, so
+// the same request 404s there instead.
+export type DeviceRole = "loader" | "app" | "unknown";
+
+const LOADER_MARKER = "Papilio ESP Bootloader";
+// Just "FPGA Companion" -- verified against real hardware that the boot-log
+// ASCII banner ("FPGA Companion for ESP32-S2/S3") and the net_recovery HTTP
+// status body ("FPGA Companion - Network Recovery") don't share a longer
+// common substring.
+const APP_MARKER = "FPGA Companion";
+
+// Feed this one line at a time from a live serial read loop, or one call
+// per line of an already-captured boot log.
+export function classifyBootLogLine(line: string): DeviceRole | null {
+  if (line.includes(LOADER_MARKER)) return "loader";
+  if (line.includes(APP_MARKER)) return "app";
+  return null;
+}
+
+// Feed this the plain-text body of a GET / request to the device's OTA
+// port (3232) -- both the loader's and FPGA-Companion's net_recovery status
+// pages are reachable there and start with a distinguishing banner line.
+export function classifyStatusResponseText(bodyText: string): DeviceRole {
+  if (bodyText.includes(LOADER_MARKER)) return "loader";
+  if (bodyText.includes(APP_MARKER)) return "app";
+  return "unknown";
+}
+
+// Only meaningful once classifyStatusResponseText()/classifyBootLogLine()
+// has already said "app" -- distinguishes a genuinely-migrated
+// (post-Phase-6) FPGA-Companion build, which always registers
+// `POST /goto-loader`, from a pre-Phase-6 self-update build, which never
+// had that route at all and so 404s (as opposed to e.g. a 500 if the route
+// exists but fails for some other reason).
+export function isLegacyPreMigrationApp(gotoLoaderHttpStatus: number): boolean {
+  return gotoLoaderHttpStatus === 404;
+}

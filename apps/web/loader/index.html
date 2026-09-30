@@ -83,16 +83,20 @@
       </div>
 
       <p class="card-note">
-        This board switches to USB Host mode (for game controllers) a few seconds after boot,
-        which disconnects the serial console. <strong>Hold USB Console</strong> saves a flag on
-        the board (persists across reboots) that keeps the console alive instead;
-        <strong>Resume USB Host</strong> clears it and brings USB Host mode up immediately.
+        Board status (over WiFi): <strong id="device-role">unknown</strong> —
+        <strong>Resume Current App</strong> reboots into whatever's already flashed (no re-upload);
+        <strong>Reboot to Loader</strong> switches to the loader so a new FPGA/ESP32 image can be
+        flashed. If the board isn't reachable over WiFi at all, <strong>Recover via USB</strong>
+        forces it back into the loader over USB — use this <em>before</em> Connect USB/Find My IP
+        if the serial console is already open elsewhere on this page.
       </p>
       <div class="flash-row">
-        <button id="btn-usb-host-hold" class="btn btn-outline" disabled>Hold USB Console</button>
-        <button id="btn-usb-host-resume" class="btn btn-outline" disabled>Resume USB Host</button>
+        <button id="btn-check-status" class="btn btn-outline" disabled>Check Board Status</button>
+        <button id="btn-goto-loader" class="btn btn-outline" disabled>Reboot to Loader (OTA)</button>
+        <button id="btn-resume-app" class="btn btn-outline" disabled>Resume Current App (OTA)</button>
+        <button id="btn-recover-usb" class="btn btn-outline">Recover via USB</button>
       </div>
-      <p class="flash-status" id="status-usb-host"></p>
+      <p class="flash-status" id="status-recover"></p>
     </section>
 
     <!-- CARDS -->
@@ -123,17 +127,16 @@
           <span id="fpga-file-label">Choose bitstream .bin&hellip;</span>
         </label>
 
-        <details class="adv-details">
-          <summary>⚙️ Advanced Options</summary>
-          <div class="flash-row">
-            <label class="adv-label" for="fpga-target">Target</label>
-            <select id="fpga-target">
-              <option value="/fpga-update">SPI Flash (persistent)</option>
-              <option value="/fpga-jtag-sram">JTAG SRAM (fast, volatile)</option>
-              <option value="/fpga-recover">Recovery (erase bitstream region, OTA only)</option>
-            </select>
-          </div>
-        </details>
+        <select id="fpga-target">
+          <option value="/fpga-update">SPI Flash (persistent)</option>
+          <option value="/fpga-jtag-sram">JTAG SRAM (fast, volatile)</option>
+        </select>
+
+        <p class="card-note">
+          <strong>SPI Flash</strong> survives a power cycle (the board briefly loads a small
+          bridge bitstream first, then writes yours to the FPGA's own flash chip).
+          <strong>JTAG SRAM</strong> is faster but lost on power cycle.
+        </p>
 
         <button id="btn-flash-fpga" class="btn btn-primary" disabled>⚡ Flash FPGA</button>
         <div class="progress" id="progress-fpga" hidden>
@@ -144,7 +147,7 @@
 
       <!-- ESP32 CARD -->
       <section class="loader-card" id="card-esp32">
-        <h2>🔧 ESP32 Flash (FPGA-Companion)</h2>
+        <h2>🔧 ESP32 Flash</h2>
 
         <div class="method-group" role="radiogroup" aria-label="ESP32 flash method">
           <label class="method-option">
@@ -157,9 +160,20 @@
           </label>
         </div>
         <p class="card-note">
-          OTA firmware updates only work once a board is already running FPGA-Companion — a
+          OTA firmware updates only work once a board is already running the loader — a
           brand-new board needs USB/Serial the first time.
         </p>
+
+        <div class="method-group" id="esp32-usb-target-group" role="radiogroup" aria-label="ESP32 USB/Serial flash target">
+          <label class="method-option">
+            <input type="radio" name="esp32-usb-target" value="full" checked>
+            <span>🆕 Fresh/blank board (whole chip, offset 0x0)</span>
+          </label>
+          <label class="method-option">
+            <input type="radio" name="esp32-usb-target" value="slot">
+            <span>🔁 Board already runs the loader (app image only, into the inactive slot)</span>
+          </label>
+        </div>
 
         <div class="source-group" role="radiogroup" aria-label="ESP32 firmware source">
           <label class="method-option">

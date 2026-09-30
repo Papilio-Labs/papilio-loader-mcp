@@ -7,13 +7,12 @@ import type { SerialLineReader } from "./serial-log.js";
 
 export type FpgaSerialTarget = "flash" | "sram";
 
-// Maps the HTTP OTA endpoint naming to the serial protocol's target keyword.
-// /fpga-recover has no serial equivalent — recovery implies the flash may be
-// corrupt, but the board still needs to be reachable somehow to even ask for
-// it, so it stays OTA-only.
+// The loader (papilio-esp-bootloader) implements both targets over this
+// protocol as of Phase 6.5: target=sram (volatile, JTAG SRAM) and
+// target=flash (persistent, the FPGA's own SPI flash chip).
 export const SERIAL_FPGA_TARGET: Record<string, FpgaSerialTarget> = {
-  "/fpga-update": "flash",
   "/fpga-jtag-sram": "sram",
+  "/fpga-update": "flash",
 };
 
 export type ProgressCallback = (loaded: number, total: number) => void;
