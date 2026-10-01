@@ -31,14 +31,14 @@
       <div class="hero-eyebrow">Hosted Web Flasher</div>
       <h1 class="section-title">Getting Started With a Blank Board</h1>
       <p class="section-sub">
-        <strong>Use this page once</strong> — the first time you set up a brand-new,
-        never-flashed Papilio Retrocade. Everything happens in this browser tab over
+        <strong>Use this page to install or recover a board.</strong> It installs the
+        Papilio ESP Bootloader and a compatible FPGA-Companion app in one USB operation.
+        Everything happens in this browser tab over
         USB and your home WiFi. Nothing is installed on your computer, and your WiFi
         credentials never leave your machine except to the board itself.
       </p>
       <p class="section-sub">
-        <strong>Already set up?</strong> Come back here only to re-flash a board back
-        to a blank state. For everyday use — JTAG SRAM, recovery mode, or OTA firmware
+        <strong>Already set up?</strong> For everyday use — JTAG SRAM, recovery mode, or OTA firmware
         updates — use the <a href="../loader/">full Papilio Loader — Web Edition</a> instead.
       </p>
     </div>
@@ -59,18 +59,18 @@
     <section class="flash-step" id="step-esp32">
       <div class="flash-step-header">
         <span class="flash-step-num">1</span>
-        <h2>Flash ESP32 Firmware (USB)</h2>
+        <h2>Install / Recover ESP32 (USB)</h2>
       </div>
       <p class="flash-step-desc">
-        We've bundled the latest official Papilio Retrocade release
-        (<strong id="esp32-bundled-version">checking&hellip;</strong>) right here — just plug
-        your board in over USB and flash, no download needed. The board reboots itself
-        automatically once flashing finishes — no button press needed.
+        We've bundled the recovery image
+        (<strong id="esp32-bundled-version">checking&hellip;</strong>) right here. Plug
+        the board in over USB and flash it to restore the new Papilio ESP Bootloader,
+        even if the current firmware is rebooting or is an older FPGA-Companion image.
       </p>
 
       <div class="flash-row">
         <button id="btn-connect" class="btn btn-outline">Connect USB</button>
-        <button id="btn-flash-esp32" class="btn btn-primary" disabled>Flash ESP32 (latest)</button>
+        <button id="btn-flash-esp32" class="btn btn-primary" disabled>Install / Recover Board</button>
       </div>
 
       <details class="flash-advanced" id="esp32-advanced">

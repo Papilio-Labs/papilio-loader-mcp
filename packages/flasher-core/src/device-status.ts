@@ -14,6 +14,7 @@
 export type DeviceRole = "loader" | "app" | "unknown";
 
 const LOADER_MARKER = "Papilio ESP Bootloader";
+const LOADER_PHASE_MARKER = "loader-phase1";
 // Just "FPGA Companion" -- verified against real hardware that the boot-log
 // ASCII banner ("FPGA Companion for ESP32-S2/S3") and the net_recovery HTTP
 // status body ("FPGA Companion - Network Recovery") don't share a longer
@@ -23,7 +24,7 @@ const APP_MARKER = "FPGA Companion";
 // Feed this one line at a time from a live serial read loop, or one call
 // per line of an already-captured boot log.
 export function classifyBootLogLine(line: string): DeviceRole | null {
-  if (line.includes(LOADER_MARKER)) return "loader";
+  if (line.includes(LOADER_MARKER) || line.includes(LOADER_PHASE_MARKER)) return "loader";
   if (line.includes(APP_MARKER)) return "app";
   return null;
 }

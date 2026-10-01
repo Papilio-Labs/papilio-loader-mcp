@@ -2176,6 +2176,8 @@ var SerialLineReader = class {
   lineListeners = /* @__PURE__ */ new Set();
   disconnectListeners = /* @__PURE__ */ new Set();
   reader = null;
+  loopDone = Promise.resolve();
+  resolveLoopDone = null;
   constructor(port, baudRate = 115200) {
     this.port = port;
     this.baudRate = baudRate;
@@ -2206,8 +2208,11 @@ var SerialLineReader = class {
       throw new Error("Serial port has no readable stream after open()");
     }
     this.stopped = false;
+    this.loopDone = new Promise((resolve) => {
+      this.resolveLoopDone = resolve;
+    });
     const decoder = new TextDecoderStream();
-    const readableClosed = this.port.readable.pipeTo(decoder.writable).catch(() => {
+    this.port.readable.pipeTo(decoder.writable).catch(() => {
     });
     const reader = decoder.readable.getReader();
     this.reader = reader;
@@ -2228,25 +2233,27 @@ var SerialLineReader = class {
           }
         }
       } catch (err2) {
-        const message = err2 instanceof Error ? err2.message : String(err2);
-        if (!this.stopped && /lost|disconnect/i.test(message)) {
-          for (const listener of this.disconnectListeners)
-            listener();
-        }
       } finally {
+        const disconnected = !this.stopped;
         this.stopped = true;
         try {
           reader.releaseLock();
         } catch {
         }
+        if (disconnected) {
+          for (const listener of this.disconnectListeners)
+            listener();
+        }
+        this.resolveLoopDone?.();
+        this.resolveLoopDone = null;
       }
     })();
-    readableClosed.then(() => {
-      this.stopped = true;
-    });
   }
-  stop() {
+  async stop() {
     this.stopped = true;
+    this.reader?.cancel().catch(() => {
+    });
+    await this.loopDone;
   }
   handleLine(line) {
     for (const listener of this.lineListeners)
@@ -2279,7 +2286,7 @@ var SerialLineReader = class {
 };
 
 // ../../packages/flasher-core/dist/provisioning.js
-var IP_REGEX = /WiFi connected - IP:\s*(\d{1,3}(?:\.\d{1,3}){3})/;
+var IP_REGEX = /(?:WiFi connected - IP:|wifi=connected\s+ip=)\s*(\d{1,3}(?:\.\d{1,3}){3})/i;
 function watchProvisioningLine(line, events) {
   const ipMatch = line.match(IP_REGEX);
   if (ipMatch)
@@ -9499,6 +9506,15 @@ function initFlashPage(doc = document) {
     if (reader.isRunning) return;
     await reader.start();
   }
+  async function closeSerialSession() {
+    if (reader?.isRunning) await reader.stop();
+    if (serialPort?.close) {
+      try {
+        await serialPort.close();
+      } catch {
+      }
+    }
+  }
   function setDeviceIp(ip) {
     deviceIp = ip;
     els.deviceIp.textContent = ip;
@@ -9574,12 +9590,11 @@ function initFlashPage(doc = document) {
           els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
         }
       });
+      await closeSerialSession();
+      log("ESP32 write complete; USB serial port closed.");
       setStatus(els.statusEsp32, "ESP32 flashed.", "ok");
       els.btnSendWifi.disabled = false;
-      setTimeout(() => {
-        startSerialListener().catch((err2) => log(`Serial listener failed to start: ${err2.message}`));
-      }, 1500);
-      setStatus(els.statusWifi, "Board rebooting automatically\u2026 waiting for it to connect to WiFi.");
+      setStatus(els.statusWifi, "Board rebooting automatically. USB serial port closed.");
     } catch (err2) {
       log(`Flash failed: ${err2.message}`);
       setStatus(els.statusEsp32, `Flash failed: ${err2.message}`, "error");
@@ -9679,6 +9694,8 @@ function initFlashPage(doc = document) {
         if (!serialTarget) throw new Error("This target has no USB serial equivalent yet \u2014 use WiFi OTA.");
         setStatus(els.statusFpga, "No IP known \u2014 flashing over USB serial (slower than WiFi)\u2026");
         await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
+        await closeSerialSession();
+        log("FPGA write complete; USB serial port closed.");
         usedPath = "serial";
       }
       setStatus(

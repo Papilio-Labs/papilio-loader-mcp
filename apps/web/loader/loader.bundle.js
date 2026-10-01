@@ -2176,6 +2176,8 @@ var SerialLineReader = class {
   lineListeners = /* @__PURE__ */ new Set();
   disconnectListeners = /* @__PURE__ */ new Set();
   reader = null;
+  loopDone = Promise.resolve();
+  resolveLoopDone = null;
   constructor(port, baudRate = 115200) {
     this.port = port;
     this.baudRate = baudRate;
@@ -2206,8 +2208,11 @@ var SerialLineReader = class {
       throw new Error("Serial port has no readable stream after open()");
     }
     this.stopped = false;
+    this.loopDone = new Promise((resolve) => {
+      this.resolveLoopDone = resolve;
+    });
     const decoder = new TextDecoderStream();
-    const readableClosed = this.port.readable.pipeTo(decoder.writable).catch(() => {
+    this.port.readable.pipeTo(decoder.writable).catch(() => {
     });
     const reader = decoder.readable.getReader();
     this.reader = reader;
@@ -2228,25 +2233,27 @@ var SerialLineReader = class {
           }
         }
       } catch (err2) {
-        const message = err2 instanceof Error ? err2.message : String(err2);
-        if (!this.stopped && /lost|disconnect/i.test(message)) {
-          for (const listener of this.disconnectListeners)
-            listener();
-        }
       } finally {
+        const disconnected = !this.stopped;
         this.stopped = true;
         try {
           reader.releaseLock();
         } catch {
         }
+        if (disconnected) {
+          for (const listener of this.disconnectListeners)
+            listener();
+        }
+        this.resolveLoopDone?.();
+        this.resolveLoopDone = null;
       }
     })();
-    readableClosed.then(() => {
-      this.stopped = true;
-    });
   }
-  stop() {
+  async stop() {
     this.stopped = true;
+    this.reader?.cancel().catch(() => {
+    });
+    await this.loopDone;
   }
   handleLine(line) {
     for (const listener of this.lineListeners)
@@ -2279,7 +2286,7 @@ var SerialLineReader = class {
 };
 
 // ../../packages/flasher-core/dist/provisioning.js
-var IP_REGEX = /WiFi connected - IP:\s*(\d{1,3}(?:\.\d{1,3}){3})/;
+var IP_REGEX = /(?:WiFi connected - IP:|wifi=connected\s+ip=)\s*(\d{1,3}(?:\.\d{1,3}){3})/i;
 function watchProvisioningLine(line, events) {
   const ipMatch = line.match(IP_REGEX);
   if (ipMatch)
@@ -2312,10 +2319,6 @@ async function sendWifiCredentials(port, ssid, pass) {
 }
 
 // ../../packages/flasher-core/dist/fpga-serial.js
-var SERIAL_FPGA_TARGET = {
-  "/fpga-jtag-sram": "sram",
-  "/fpga-update": "flash"
-};
 async function flashFpgaOverSerial(port, reader, target, data, onProgress) {
   if (!port)
     throw new Error("No USB serial port connected.");
@@ -2402,16 +2405,6 @@ async function flashEsp32OverSerial(port, reader, data, onProgress) {
 
 // ../../packages/flasher-core/dist/ota.js
 var OTA_PORT = 3232;
-async function flashEsp32Ota(poster, ip, data, onProgress, port = OTA_PORT) {
-  const url = `http://${ip}:${port}/update`;
-  return poster.post(url, data, onProgress);
-}
-async function resumeEsp32Ota(ip, port = OTA_PORT) {
-  const res = await fetch(`http://${ip}:${port}/resume`, { method: "POST" });
-  if (!res.ok)
-    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
-  return res.text();
-}
 async function fetchDeviceStatusText(ip, port = OTA_PORT) {
   const res = await fetch(`http://${ip}:${port}/`);
   return res.text();
@@ -9543,9 +9536,10 @@ async function recoverIntoLoader(port, options = {}) {
 
 // ../../packages/flasher-core/dist/device-status.js
 var LOADER_MARKER = "Papilio ESP Bootloader";
+var LOADER_PHASE_MARKER = "loader-phase1";
 var APP_MARKER = "FPGA Companion";
 function classifyBootLogLine(line) {
-  if (line.includes(LOADER_MARKER))
+  if (line.includes(LOADER_MARKER) || line.includes(LOADER_PHASE_MARKER))
     return "loader";
   if (line.includes(APP_MARKER))
     return "app";
@@ -9586,7 +9580,6 @@ function setStatus(el, message, kind) {
 }
 
 // ../../packages/loader-ui/src/loader-page.js
-var RELEASE_API = "https://api.github.com/repos/Papilio-Retrocade/FPGA-Companion/releases/latest";
 function initLoaderPage(doc = document, win = window) {
   const capabilities = detectCapabilities(win);
   const els = {
@@ -9610,15 +9603,9 @@ function initLoaderPage(doc = document, win = window) {
     statusRecover: doc.getElementById("status-recover"),
     fpgaFile: doc.getElementById("fpga-file"),
     fpgaFileLabel: doc.getElementById("fpga-file-label"),
-    fpgaTarget: doc.getElementById("fpga-target"),
     btnFlashFpga: doc.getElementById("btn-flash-fpga"),
     progressFpga: doc.getElementById("progress-fpga"),
     statusFpga: doc.getElementById("status-fpga"),
-    esp32ReleaseFields: doc.getElementById("esp32-release-fields"),
-    esp32UploadFields: doc.getElementById("esp32-upload-fields"),
-    esp32UsbTargetGroup: doc.getElementById("esp32-usb-target-group"),
-    btnFetchRelease: doc.getElementById("btn-fetch-release"),
-    esp32ReleaseLabel: doc.getElementById("esp32-release-label"),
     esp32File: doc.getElementById("esp32-file"),
     esp32FileLabel: doc.getElementById("esp32-file-label"),
     btnFlashEsp32: doc.getElementById("btn-flash-esp32"),
@@ -9632,9 +9619,8 @@ function initLoaderPage(doc = document, win = window) {
     wifiLogPanel: doc.getElementById("wifi-log-panel"),
     appVersion: doc.getElementById("app-version")
   };
-  if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
   if (els.appVersion) {
-    els.appVersion.textContent = `v${true ? "0.1.0" : "dev"}`;
+    els.appVersion.textContent = `v${true ? "0.1.1" : "dev"}`;
   }
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
@@ -9642,8 +9628,8 @@ function initLoaderPage(doc = document, win = window) {
   let reader = null;
   let deviceIp = null;
   let awaitingReconnect = false;
-  let esp32Release = null;
   let recoveryWatch = null;
+  const reconnectWaiters = /* @__PURE__ */ new Set();
   els.btnClearLog?.addEventListener("click", () => {
     els.log.textContent = "";
   });
@@ -9665,6 +9651,8 @@ function initLoaderPage(doc = document, win = window) {
     serialPort = event.target;
     reader = new SerialLineReader(serialPort);
     wireReaderEvents();
+    for (const resolve of reconnectWaiters) resolve(serialPort);
+    reconnectWaiters.clear();
     log("Board USB reconnected after reset, resuming serial listener\u2026");
     startSerialListenerWithRetry().catch((err2) => log(`Serial listener failed to resume: ${err2.message}`, "error"));
   });
@@ -9705,6 +9693,47 @@ function initLoaderPage(doc = document, win = window) {
       }
     }
   }
+  async function stopSerialListener() {
+    if (reader?.isRunning) {
+      await reader.stop();
+    }
+    if (serialPort?.close) {
+      try {
+        await serialPort.close();
+      } catch {
+      }
+    }
+  }
+  async function waitForUsbReconnect(previousPort, timeoutMs = 15e3) {
+    const started = Date.now();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    while (Date.now() - started < timeoutMs) {
+      if (serialPort && serialPort !== previousPort) return serialPort;
+      const ports = await navigator.serial.getPorts();
+      const candidate = ports.find((port) => {
+        if (!port.connected) return false;
+        if (port !== previousPort) return true;
+        return !previousPort.connected || !reader?.isRunning;
+      });
+      if (candidate) {
+        if (candidate === previousPort) {
+          try {
+            await candidate.close();
+          } catch {
+          }
+          serialPort = candidate;
+          reader = new SerialLineReader(serialPort);
+          wireReaderEvents();
+          awaitingReconnect = false;
+          await startSerialListenerWithRetry();
+          log("Board USB reconnected after reset, resuming serial listener\u2026");
+        }
+        return serialPort;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error("Timed out waiting for the board USB port to reconnect.");
+  }
   function setDeviceIp(ip) {
     deviceIp = ip;
     els.deviceIp.textContent = ip;
@@ -9713,6 +9742,56 @@ function initLoaderPage(doc = document, win = window) {
     updateFlashFpgaEnabled();
     updateFlashEsp32Enabled();
     checkDeviceStatus().catch((err2) => log(`Status check failed: ${err2.message}`, "error"));
+  }
+  async function ensureUsbPort() {
+    if (serialPort) return;
+    serialPort = await navigator.serial.requestPort();
+    reader = new SerialLineReader(serialPort);
+    wireReaderEvents();
+    log("Serial port selected.");
+  }
+  function waitForDeviceIp(timeoutMs = 12e3) {
+    if (deviceIp) return Promise.resolve(deviceIp);
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const poll = () => {
+        if (deviceIp || Date.now() - started >= timeoutMs) {
+          resolve(deviceIp);
+          return;
+        }
+        setTimeout(poll, 250);
+      };
+      poll();
+    });
+  }
+  async function prepareForProgramming(statusElement) {
+    await ensureUsbPort();
+    await stopSerialListener();
+    deviceIp = null;
+    setStatus(statusElement, "Entering the loader over USB\u2026");
+    const classified = new Promise((resolve) => {
+      recoveryWatch = { resolve };
+      setTimeout(() => {
+        if (recoveryWatch) {
+          recoveryWatch = null;
+          resolve(null);
+        }
+      }, 12e3);
+    });
+    const previousPort = serialPort;
+    awaitingReconnect = true;
+    await recoverIntoLoader(serialPort, { onLog: (message) => log(message) });
+    await waitForUsbReconnect(previousPort);
+    await startSerialListenerWithRetry();
+    const role = await classified;
+    if (role && role !== "loader") {
+      throw new Error("The board did not boot into the loader.");
+    }
+    setStatus(statusElement, "Loader ready \u2014 looking for WiFi\u2026");
+    const ip = await waitForDeviceIp();
+    if (ip) log(`Loader found at ${ip}; using OTA where supported.`);
+    else log("Loader WiFi not available; using USB serial.");
+    return ip;
   }
   async function checkDeviceStatus() {
     if (!deviceIp) return;
@@ -9913,23 +9992,13 @@ function initLoaderPage(doc = document, win = window) {
       setStatus(els.statusConnect, `Send failed: ${err2.message}`, "error");
     }
   });
-  function fpgaMethod() {
-    return doc.querySelector('input[name="fpga-method"]:checked').value;
-  }
   els.fpgaFile.addEventListener("change", () => {
     const file = els.fpgaFile.files[0];
     els.fpgaFileLabel.textContent = file ? file.name : "Choose bitstream .bin\u2026";
     updateFlashFpgaEnabled();
   });
-  doc.querySelectorAll('input[name="fpga-method"]').forEach((r) => r.addEventListener("change", updateFlashFpgaEnabled));
-  function fpgaTarget() {
-    return els.fpgaTarget.value;
-  }
   function updateFlashFpgaEnabled() {
-    const method = fpgaMethod();
-    const hasFile = Boolean(els.fpgaFile.files[0]);
-    const hasTransport = method === "ota" ? Boolean(deviceIp) : Boolean(serialPort);
-    els.btnFlashFpga.disabled = !(hasFile && hasTransport);
+    els.btnFlashFpga.disabled = !els.fpgaFile.files[0];
   }
   function validateFpgaFile(file) {
     if (!file) return null;
@@ -9943,7 +10012,6 @@ function initLoaderPage(doc = document, win = window) {
     els.progressFpga.querySelector(".progress-bar").style.width = `${pct}%`;
   }
   els.btnFlashFpga.addEventListener("click", async () => {
-    const method = fpgaMethod();
     const file = els.fpgaFile.files[0];
     const mismatchError = validateFpgaFile(file);
     if (mismatchError) {
@@ -9953,15 +10021,20 @@ function initLoaderPage(doc = document, win = window) {
     els.btnFlashFpga.disabled = true;
     els.progressFpga.hidden = false;
     updateFpgaProgress(0, 1);
-    setStatus(els.statusFpga, method === "ota" ? "Uploading to board over WiFi\u2026" : "Uploading to board over USB serial\u2026");
     try {
       const body = await file.arrayBuffer();
-      if (method === "ota") {
-        const responseText = await flashFpgaOta(otaPoster, deviceIp, fpgaTarget(), body, updateFpgaProgress);
+      const ip = await prepareForProgramming(els.statusFpga);
+      if (ip) {
+        const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);
         log(responseText);
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("FPGA write complete; USB serial port closed.", "success");
       } else {
-        const serialTarget = SERIAL_FPGA_TARGET[fpgaTarget()];
-        await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
+        await flashFpgaOverSerial(serialPort, reader, "flash", new Uint8Array(body), updateFpgaProgress);
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("FPGA write complete; USB serial port closed.", "success");
       }
       setStatus(els.statusFpga, "FPGA programmed successfully.", "ok");
     } catch (err2) {
@@ -9972,125 +10045,53 @@ function initLoaderPage(doc = document, win = window) {
       updateFlashFpgaEnabled();
     }
   });
-  function esp32Method() {
-    return doc.querySelector('input[name="esp32-method"]:checked').value;
-  }
-  function esp32Source() {
-    return doc.querySelector('input[name="esp32-source"]:checked').value;
-  }
-  function esp32UsbTarget() {
-    const el = doc.querySelector('input[name="esp32-usb-target"]:checked');
-    return el ? el.value : "full";
-  }
-  doc.querySelectorAll('input[name="esp32-source"]').forEach(
-    (r) => r.addEventListener("change", () => {
-      const useRelease = esp32Source() === "release";
-      els.esp32ReleaseFields.hidden = !useRelease;
-      els.esp32UploadFields.hidden = useRelease;
-      updateFlashEsp32Enabled();
-    })
-  );
-  doc.querySelectorAll('input[name="esp32-method"]').forEach(
-    (r) => r.addEventListener("change", () => {
-      if (esp32Release) {
-        esp32Release = null;
-        els.esp32ReleaseLabel.textContent = "not fetched yet \u2014 click Fetch Latest Release";
-      }
-      if (els.esp32UsbTargetGroup) els.esp32UsbTargetGroup.hidden = esp32Method() !== "usb";
-      updateFlashEsp32Enabled();
-    })
-  );
   els.esp32File.addEventListener("change", () => {
     const file = els.esp32File.files[0];
-    els.esp32FileLabel.textContent = file ? file.name : "Choose *-merged.bin\u2026";
+    els.esp32FileLabel.textContent = file ? file.name : "Choose ESP32 firmware .bin\u2026";
     updateFlashEsp32Enabled();
   });
   function updateFlashEsp32Enabled() {
-    const method = esp32Method();
-    const source = esp32Source();
-    const hasFile = source === "release" ? Boolean(esp32Release) : Boolean(els.esp32File.files[0]);
-    const hasTransport = method === "ota" ? Boolean(deviceIp) : Boolean(serialPort);
-    els.btnFlashEsp32.disabled = !(hasFile && hasTransport);
+    els.btnFlashEsp32.disabled = !els.esp32File.files[0];
   }
-  els.btnFetchRelease?.addEventListener("click", async () => {
-    els.btnFetchRelease.disabled = true;
-    els.esp32ReleaseLabel.textContent = "fetching\u2026";
-    const method = esp32Method();
-    try {
-      let name, data;
-      if (capabilities.githubReleaseFetch && win.papilioDesktop?.fetchLatestRelease) {
-        ({ name, data } = await win.papilioDesktop.fetchLatestRelease(method));
-      } else {
-        const resp = await fetch(RELEASE_API);
-        if (!resp.ok) throw new Error(`GitHub API HTTP ${resp.status}`);
-        const release = await resp.json();
-        const asset = (release.assets || []).find(
-          (a) => method === "ota" ? /\.bin$/i.test(a.name) && !/-merged\.bin$/i.test(a.name) && !/^(bootloader|partition-table|ota_data_initial)\.bin$/i.test(a.name) : /-merged\.bin$/i.test(a.name)
-        );
-        if (!asset) throw new Error(`No matching .bin asset found in the latest release for ${method} flashing.`);
-        log(`Downloading ${asset.name} from ${release.tag_name}\u2026`);
-        const assetResp = await fetch(asset.browser_download_url);
-        if (!assetResp.ok) throw new Error(`Asset download HTTP ${assetResp.status}`);
-        data = new Uint8Array(await assetResp.arrayBuffer());
-        name = `${asset.name} (${release.tag_name})`;
-      }
-      esp32Release = { name, data };
-      els.esp32ReleaseLabel.textContent = name;
-      log(`Fetched ${name} (${data.byteLength} bytes).`, "success");
-    } catch (err2) {
-      esp32Release = null;
-      els.esp32ReleaseLabel.textContent = 'fetch failed (likely CORS) \u2014 switch to "Upload my own" instead';
-      log(`Fetch latest release failed: ${err2.message}`, "error");
-    } finally {
-      els.btnFetchRelease.disabled = false;
-      updateFlashEsp32Enabled();
-    }
-  });
+  function isMergedEsp32Image(data) {
+    return data.length >= 32770 && data[0] === 233 && data[32768] === 80 && data[32769] === 170;
+  }
   els.btnFlashEsp32.addEventListener("click", async () => {
-    const method = esp32Method();
-    const source = esp32Source();
-    let data;
-    if (source === "release") {
-      if (!esp32Release) return;
-      data = esp32Release.data;
-    } else {
-      const file = els.esp32File.files[0];
-      if (!file) return;
-      data = new Uint8Array(await file.arrayBuffer());
-    }
+    const file = els.esp32File.files[0];
+    if (!file) return;
+    const data = new Uint8Array(await file.arrayBuffer());
     els.btnFlashEsp32.disabled = true;
     els.progressEsp32.hidden = false;
-    setStatus(els.statusEsp32, method === "ota" ? "Uploading to board over WiFi\u2026" : "Connecting to ESP32\u2026");
     try {
-      if (method === "ota") {
-        const responseText = await flashEsp32Ota(otaPoster, deviceIp, data, (loaded, total) => {
+      if (isMergedEsp32Image(data)) {
+        await ensureUsbPort();
+        await stopSerialListener();
+        setStatus(els.statusEsp32, "Connecting to ESP32 over USB\u2026");
+        await flashEsp32(serialPort, data, {
+          onLog: (msg) => log(msg, "success"),
+          onProgress: (written, total) => {
+            const pct = Math.round(written / total * 100);
+            els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
+          }
+        });
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("ESP32 write complete; USB serial port closed.", "success");
+        setStatus(els.statusEsp32, "ESP32 flashed. Board rebooting automatically.", "ok");
+      } else {
+        setStatus(els.statusEsp32, "App image detected \u2014 entering the loader\u2026");
+        await prepareForProgramming(els.statusEsp32);
+        setStatus(els.statusEsp32, "Streaming app image into the inactive slot\u2026");
+        await flashEsp32OverSerial(serialPort, reader, data, (loaded, total) => {
           const pct = total ? Math.round(loaded / total * 100) : 0;
           els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
         });
-        log(responseText);
-        setStatus(els.statusEsp32, "ESP32 firmware updated over WiFi.", "ok");
-      } else {
-        const usbTarget = esp32UsbTarget();
-        if (usbTarget === "slot") {
-          setStatus(els.statusEsp32, "Streaming app image into the inactive slot\u2026");
-          await flashEsp32OverSerial(serialPort, reader, data, (loaded, total) => {
-            const pct = total ? Math.round(loaded / total * 100) : 0;
-            els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
-          });
-          setStatus(els.statusEsp32, "ESP32 app flashed into the inactive slot. Board rebooting automatically.", "ok");
-        } else {
-          await flashEsp32(serialPort, data, {
-            onLog: (msg) => log(msg, "success"),
-            onProgress: (written, total) => {
-              const pct = Math.round(written / total * 100);
-              els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
-            }
-          });
-          setStatus(els.statusEsp32, "ESP32 flashed. Board rebooting automatically.", "ok");
-        }
-        els.btnSendWifi.disabled = false;
-        startSerialListenerWithRetry().catch((err2) => log(`Serial listener failed to start: ${err2.message}`, "error"));
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("ESP32 write complete; USB serial port closed.", "success");
+        setStatus(els.statusEsp32, "ESP32 app flashed into the inactive slot. Board rebooting automatically.", "ok");
       }
+      els.btnSendWifi.disabled = false;
     } catch (err2) {
       log(`ESP32 flash failed: ${err2.message}`, "error");
       setStatus(els.statusEsp32, `Flash failed: ${err2.message}`, "error");

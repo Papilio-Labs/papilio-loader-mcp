@@ -1,5 +1,5 @@
-// fetch-latest-firmware.mjs — downloads the latest FPGA-Companion release's
-// merged ESP32 binary and writes it (plus a small manifest) into
+// fetch-latest-firmware.mjs — downloads the latest Papilio ESP Bootloader
+// recovery image and writes it (plus a small manifest) into
 // apps/web/getting-started/firmware/ so the Getting Started page can flash it
 // with no manual download step.
 //
@@ -13,8 +13,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const RELEASES_API = "https://api.github.com/repos/Papilio-Retrocade/FPGA-Companion/releases/latest";
-const ASSET_SUFFIX = "-merged.bin";
+const RELEASES_API = "https://api.github.com/repos/Papilio-Labs/papilio-esp-bootloader/releases/latest";
+const ASSET_SUFFIX = "-recovery.bin";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(scriptDir, "..", "apps", "web", "getting-started", "firmware");
@@ -34,7 +34,9 @@ async function main() {
 
   const asset = (release.assets || []).find((a) => a.name.endsWith(ASSET_SUFFIX));
   if (!asset) {
-    throw new Error(`No asset ending in "${ASSET_SUFFIX}" found on release ${release.tag_name}`);
+    throw new Error(
+      `No Papilio ESP Bootloader recovery asset ending in "${ASSET_SUFFIX}" found on release ${release.tag_name}`,
+    );
   }
 
   console.log(`Downloading ${asset.name} (${asset.size} bytes) from ${release.tag_name}...`);

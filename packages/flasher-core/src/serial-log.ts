@@ -25,6 +25,8 @@ export class SerialLineReader {
   private lineListeners = new Set<LineListener>();
   private disconnectListeners = new Set<() => void>();
   private reader: ReadableStreamDefaultReader<string> | null = null;
+  private loopDone: Promise<void> = Promise.resolve();
+  private resolveLoopDone: (() => void) | null = null;
 
   constructor(port: SerialLike, baudRate = 115200) {
     this.port = port;
@@ -61,8 +63,11 @@ export class SerialLineReader {
     }
 
     this.stopped = false;
+    this.loopDone = new Promise((resolve) => {
+      this.resolveLoopDone = resolve;
+    });
     const decoder = new TextDecoderStream();
-    const readableClosed = this.port.readable
+    this.port.readable
       .pipeTo(decoder.writable as WritableStream<Uint8Array>)
       .catch(() => {});
     const reader = decoder.readable.getReader();
@@ -86,27 +91,31 @@ export class SerialLineReader {
           }
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!this.stopped && /lost|disconnect/i.test(message)) {
-          for (const listener of this.disconnectListeners) listener();
-        }
+        // USB re-enumeration may end the stream with an error or normally;
+        // both cases are reported once from finally below.
       } finally {
+        const disconnected = !this.stopped;
         this.stopped = true;
         try {
           reader.releaseLock();
         } catch {
           // already released
         }
+        if (disconnected) {
+          for (const listener of this.disconnectListeners) listener();
+        }
+        this.resolveLoopDone?.();
+        this.resolveLoopDone = null;
       }
     })();
-
-    readableClosed.then(() => {
-      this.stopped = true;
-    });
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopped = true;
+    // A pending read keeps the stream locked even after the loop's stop flag
+    // changes. Cancel it so esptool-js can open the same native USB port.
+    this.reader?.cancel().catch(() => {});
+    await this.loopDone;
   }
 
   private handleLine(line: string): void {

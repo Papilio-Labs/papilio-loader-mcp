@@ -121,6 +121,17 @@ export function initFlashPage(doc = document) {
     await reader.start();
   }
 
+  async function closeSerialSession() {
+    if (reader?.isRunning) await reader.stop();
+    if (serialPort?.close) {
+      try {
+        await serialPort.close();
+      } catch {
+        // The port may already be closed after USB re-enumeration.
+      }
+    }
+  }
+
   function setDeviceIp(ip) {
     deviceIp = ip;
     els.deviceIp.textContent = ip;
@@ -218,16 +229,11 @@ export function initFlashPage(doc = document) {
         },
       });
 
+      await closeSerialSession();
+      log("ESP32 write complete; USB serial port closed.");
       setStatus(els.statusEsp32, "ESP32 flashed.", "ok");
       els.btnSendWifi.disabled = false;
-
-      // Give the board a moment to boot, then resume listening on the same
-      // port for its log output (WiFi status, provisioning acks). The board
-      // reboots itself automatically — no physical RESET press needed.
-      setTimeout(() => {
-        startSerialListener().catch((err) => log(`Serial listener failed to start: ${err.message}`));
-      }, 1500);
-      setStatus(els.statusWifi, "Board rebooting automatically… waiting for it to connect to WiFi.");
+      setStatus(els.statusWifi, "Board rebooting automatically. USB serial port closed.");
     } catch (err) {
       log(`Flash failed: ${err.message}`);
       setStatus(els.statusEsp32, `Flash failed: ${err.message}`, "error");
@@ -352,6 +358,8 @@ export function initFlashPage(doc = document) {
         if (!serialTarget) throw new Error("This target has no USB serial equivalent yet — use WiFi OTA.");
         setStatus(els.statusFpga, "No IP known — flashing over USB serial (slower than WiFi)…");
         await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
+        await closeSerialSession();
+        log("FPGA write complete; USB serial port closed.");
         usedPath = "serial";
       }
 

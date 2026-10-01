@@ -63,10 +63,9 @@ export async function requestGotoLoader(ip: string, port: number = OTA_PORT): Pr
   return res.status;
 }
 
-// The loader currently only implements JTAG-SRAM (volatile) FPGA flashing
-// over OTA — there is no persistent SPI-flash or recovery endpoint despite
-// earlier UI copy suggesting otherwise.
-export type FpgaOtaEndpoint = "/fpga-jtag-sram";
+// FPGA OTA targets supported by the Phase 7 loader. SPI Flash is the default
+// persistent target; JTAG SRAM remains available for quick volatile tests.
+export type FpgaOtaEndpoint = "/fpga-update" | "/fpga-jtag-sram";
 
 export async function flashFpgaOta(
   poster: OtaPoster,

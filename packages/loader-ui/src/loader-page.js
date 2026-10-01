@@ -1,22 +1,23 @@
-// loader-page.js — full Device Flash Manager (explicit USB/Serial vs
-// OTA/WiFi method selection per card, "fetch latest release" shortcut,
-// color-coded status log). Ported from papilioworks.com/loader/loader.js
+// loader-page.js — full Device Flash Manager (automatic USB recovery and
+// OTA/WiFi selection, plus optional desktop extras).
+//
+// The primary workflow is deliberately small: choose a file and press
+// Program. The USB connection is used to enter the loader; the fastest
+// available programming path is then selected automatically.
+// Ported from papilioworks.com/loader/loader.js
 // onto @papilio-loader/flasher-core, with capability-gated desktop extras
 // (LAN discovery, UDP WiFi log monitor, filesystem saved files) that light
 // up automatically when running inside the Electron app (window.papilioDesktop).
 import {
   SerialLineReader,
   flashEsp32,
-  flashEsp32OverSerial,
   resetEsp32ForIp,
   recoverIntoLoader,
   sendWifiCredentials,
   watchProvisioningLine,
   flashFpgaOverSerial,
-  SERIAL_FPGA_TARGET,
+  flashEsp32OverSerial,
   flashFpgaOta,
-  flashEsp32Ota,
-  resumeEsp32Ota,
   requestGotoLoader,
   fetchDeviceStatusText,
   createBrowserXhrPoster,
@@ -25,8 +26,6 @@ import {
   classifyBootLogLine,
 } from "@papilio-loader/flasher-core";
 import { makeLogger, setStatus } from "./dom.js";
-
-const RELEASE_API = "https://api.github.com/repos/Papilio-Retrocade/FPGA-Companion/releases/latest";
 
 export function initLoaderPage(doc = document, win = window) {
   const capabilities = detectCapabilities(win);
@@ -54,16 +53,10 @@ export function initLoaderPage(doc = document, win = window) {
 
     fpgaFile: doc.getElementById("fpga-file"),
     fpgaFileLabel: doc.getElementById("fpga-file-label"),
-    fpgaTarget: doc.getElementById("fpga-target"),
     btnFlashFpga: doc.getElementById("btn-flash-fpga"),
     progressFpga: doc.getElementById("progress-fpga"),
     statusFpga: doc.getElementById("status-fpga"),
 
-    esp32ReleaseFields: doc.getElementById("esp32-release-fields"),
-    esp32UploadFields: doc.getElementById("esp32-upload-fields"),
-    esp32UsbTargetGroup: doc.getElementById("esp32-usb-target-group"),
-    btnFetchRelease: doc.getElementById("btn-fetch-release"),
-    esp32ReleaseLabel: doc.getElementById("esp32-release-label"),
     esp32File: doc.getElementById("esp32-file"),
     esp32FileLabel: doc.getElementById("esp32-file-label"),
     btnFlashEsp32: doc.getElementById("btn-flash-esp32"),
@@ -80,8 +73,6 @@ export function initLoaderPage(doc = document, win = window) {
     appVersion: doc.getElementById("app-version"),
   };
 
-  if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
-
   // __LOADER_VERSION__ is replaced at build time (see apps/web/build.mjs);
   // fall back gracefully if this page is ever loaded unbundled.
   if (els.appVersion) {
@@ -95,8 +86,8 @@ export function initLoaderPage(doc = document, win = window) {
   let reader = null;
   let deviceIp = null;
   let awaitingReconnect = false;
-  let esp32Release = null; // { name, data } once fetched
   let recoveryWatch = null; // { resolve } while a Recover-via-USB boot-log classification is armed
+  const reconnectWaiters = new Set();
 
   els.btnClearLog?.addEventListener("click", () => {
     els.log.textContent = "";
@@ -121,6 +112,8 @@ export function initLoaderPage(doc = document, win = window) {
     serialPort = event.target;
     reader = new SerialLineReader(serialPort);
     wireReaderEvents();
+    for (const resolve of reconnectWaiters) resolve(serialPort);
+    reconnectWaiters.clear();
     log("Board USB reconnected after reset, resuming serial listener…");
     startSerialListenerWithRetry().catch((err) => log(`Serial listener failed to resume: ${err.message}`, "error"));
   });
@@ -169,6 +162,62 @@ export function initLoaderPage(doc = document, win = window) {
     }
   }
 
+  async function stopSerialListener() {
+    if (reader?.isRunning) {
+      await reader.stop();
+    }
+    // SerialLineReader owns the stream but intentionally does not close the
+    // port. esptool-js needs the Web Serial port itself to be closed before it
+    // can reopen it for the ROM download-mode handshake.
+    if (serialPort?.close) {
+      try {
+        await serialPort.close();
+      } catch {
+        // It may already be closed after USB re-enumeration.
+      }
+    }
+  }
+
+  async function waitForUsbReconnect(previousPort, timeoutMs = 15000) {
+    const started = Date.now();
+
+    // Chrome may reattach an authorized Web Serial port without dispatching a
+    // new connect event. Give the reset a moment to take effect, then poll the
+    // authorized port list so the same SerialPort object can be reopened.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    while (Date.now() - started < timeoutMs) {
+      if (serialPort && serialPort !== previousPort) return serialPort;
+
+      const ports = await navigator.serial.getPorts();
+      const candidate = ports.find((port) => {
+        if (!port.connected) return false;
+        if (port !== previousPort) return true;
+        return !previousPort.connected || !reader?.isRunning;
+      });
+
+      if (candidate) {
+        if (candidate === previousPort) {
+          try {
+            await candidate.close();
+          } catch {
+            // The port may already be closed after USB re-enumeration.
+          }
+          serialPort = candidate;
+          reader = new SerialLineReader(serialPort);
+          wireReaderEvents();
+          awaitingReconnect = false;
+          await startSerialListenerWithRetry();
+          log("Board USB reconnected after reset, resuming serial listener…");
+        }
+        return serialPort;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    throw new Error("Timed out waiting for the board USB port to reconnect.");
+  }
+
   function setDeviceIp(ip) {
     deviceIp = ip;
     els.deviceIp.textContent = ip;
@@ -177,6 +226,63 @@ export function initLoaderPage(doc = document, win = window) {
     updateFlashFpgaEnabled();
     updateFlashEsp32Enabled();
     checkDeviceStatus().catch((err) => log(`Status check failed: ${err.message}`, "error"));
+  }
+
+  async function ensureUsbPort() {
+    if (serialPort) return;
+    serialPort = await navigator.serial.requestPort();
+    reader = new SerialLineReader(serialPort);
+    wireReaderEvents();
+    log("Serial port selected.");
+  }
+
+  function waitForDeviceIp(timeoutMs = 12000) {
+    if (deviceIp) return Promise.resolve(deviceIp);
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const poll = () => {
+        if (deviceIp || Date.now() - started >= timeoutMs) {
+          resolve(deviceIp);
+          return;
+        }
+        setTimeout(poll, 250);
+      };
+      poll();
+    });
+  }
+
+  async function prepareForProgramming(statusElement) {
+    await ensureUsbPort();
+
+    await stopSerialListener();
+
+    deviceIp = null;
+    setStatus(statusElement, "Entering the loader over USB…");
+    const classified = new Promise((resolve) => {
+      recoveryWatch = { resolve };
+      setTimeout(() => {
+        if (recoveryWatch) {
+          recoveryWatch = null;
+          resolve(null);
+        }
+      }, 12000);
+    });
+
+    const previousPort = serialPort;
+    awaitingReconnect = true;
+    await recoverIntoLoader(serialPort, { onLog: (message) => log(message) });
+    await waitForUsbReconnect(previousPort);
+    await startSerialListenerWithRetry();
+    const role = await classified;
+    if (role && role !== "loader") {
+      throw new Error("The board did not boot into the loader.");
+    }
+
+    setStatus(statusElement, "Loader ready — looking for WiFi…");
+    const ip = await waitForDeviceIp();
+    if (ip) log(`Loader found at ${ip}; using OTA where supported.`);
+    else log("Loader WiFi not available; using USB serial.");
+    return ip;
   }
 
   /* -------------------------------------------------------------------- */
@@ -442,27 +548,14 @@ export function initLoaderPage(doc = document, win = window) {
   /* FPGA card                                                              */
   /* -------------------------------------------------------------------- */
 
-  function fpgaMethod() {
-    return doc.querySelector('input[name="fpga-method"]:checked').value;
-  }
-
   els.fpgaFile.addEventListener("change", () => {
     const file = els.fpgaFile.files[0];
     els.fpgaFileLabel.textContent = file ? file.name : "Choose bitstream .bin…";
     updateFlashFpgaEnabled();
   });
 
-  doc.querySelectorAll('input[name="fpga-method"]').forEach((r) => r.addEventListener("change", updateFlashFpgaEnabled));
-
-  function fpgaTarget() {
-    return els.fpgaTarget.value;
-  }
-
   function updateFlashFpgaEnabled() {
-    const method = fpgaMethod();
-    const hasFile = Boolean(els.fpgaFile.files[0]);
-    const hasTransport = method === "ota" ? Boolean(deviceIp) : Boolean(serialPort);
-    els.btnFlashFpga.disabled = !(hasFile && hasTransport);
+    els.btnFlashFpga.disabled = !els.fpgaFile.files[0];
   }
 
   function validateFpgaFile(file) {
@@ -479,7 +572,6 @@ export function initLoaderPage(doc = document, win = window) {
   }
 
   els.btnFlashFpga.addEventListener("click", async () => {
-    const method = fpgaMethod();
     const file = els.fpgaFile.files[0];
 
     const mismatchError = validateFpgaFile(file);
@@ -491,17 +583,25 @@ export function initLoaderPage(doc = document, win = window) {
     els.btnFlashFpga.disabled = true;
     els.progressFpga.hidden = false;
     updateFpgaProgress(0, 1);
-    setStatus(els.statusFpga, method === "ota" ? "Uploading to board over WiFi…" : "Uploading to board over USB serial…");
 
     try {
       const body = await file.arrayBuffer();
+      const ip = await prepareForProgramming(els.statusFpga);
 
-      if (method === "ota") {
-        const responseText = await flashFpgaOta(otaPoster, deviceIp, fpgaTarget(), body, updateFpgaProgress);
+      if (ip) {
+        const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);
         log(responseText);
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("FPGA write complete; USB serial port closed.", "success");
       } else {
-        const serialTarget = SERIAL_FPGA_TARGET[fpgaTarget()];
-        await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
+        await flashFpgaOverSerial(serialPort, reader, "flash", new Uint8Array(body), updateFpgaProgress);
+        // FPGA flash does not reboot the ESP32. Close the serial session now
+        // that FPGA_FLASH_OK has arrived; waiting for a USB reconnect here
+        // would time out because no reconnect is expected.
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("FPGA write complete; USB serial port closed.", "success");
       }
 
       setStatus(els.statusFpga, "FPGA programmed successfully.", "ok");
@@ -518,151 +618,62 @@ export function initLoaderPage(doc = document, win = window) {
   /* ESP32 card                                                             */
   /* -------------------------------------------------------------------- */
 
-  function esp32Method() {
-    return doc.querySelector('input[name="esp32-method"]:checked').value;
-  }
-
-  function esp32Source() {
-    return doc.querySelector('input[name="esp32-source"]:checked').value;
-  }
-
-  // "full" = whole-chip esptool flash at offset 0x0 (bootloader + partition
-  // table + app) -- needed for a blank board or one still on a legacy
-  // pre-migration image. "slot" = APP_FLASH_BEGIN (app-serial.ts), which
-  // only works once the board is already running the loader (Phase 7).
-  function esp32UsbTarget() {
-    const el = doc.querySelector('input[name="esp32-usb-target"]:checked');
-    return el ? el.value : "full";
-  }
-
-  doc.querySelectorAll('input[name="esp32-source"]').forEach((r) =>
-    r.addEventListener("change", () => {
-      const useRelease = esp32Source() === "release";
-      els.esp32ReleaseFields.hidden = !useRelease;
-      els.esp32UploadFields.hidden = useRelease;
-      updateFlashEsp32Enabled();
-    })
-  );
-  doc.querySelectorAll('input[name="esp32-method"]').forEach((r) =>
-    r.addEventListener("change", () => {
-      // A merged.bin fetched for USB/Serial isn't valid for OTA (and vice
-      // versa) — force a re-fetch instead of flashing the wrong asset type.
-      if (esp32Release) {
-        esp32Release = null;
-        els.esp32ReleaseLabel.textContent = "not fetched yet — click Fetch Latest Release";
-      }
-      if (els.esp32UsbTargetGroup) els.esp32UsbTargetGroup.hidden = esp32Method() !== "usb";
-      updateFlashEsp32Enabled();
-    })
-  );
-
   els.esp32File.addEventListener("change", () => {
     const file = els.esp32File.files[0];
-    els.esp32FileLabel.textContent = file ? file.name : "Choose *-merged.bin…";
+    els.esp32FileLabel.textContent = file ? file.name : "Choose ESP32 firmware .bin…";
     updateFlashEsp32Enabled();
   });
 
   function updateFlashEsp32Enabled() {
-    const method = esp32Method();
-    const source = esp32Source();
-    const hasFile = source === "release" ? Boolean(esp32Release) : Boolean(els.esp32File.files[0]);
-    const hasTransport = method === "ota" ? Boolean(deviceIp) : Boolean(serialPort);
-    els.btnFlashEsp32.disabled = !(hasFile && hasTransport);
+    els.btnFlashEsp32.disabled = !els.esp32File.files[0];
   }
 
-  // GitHub release assets redirect to objects.githubusercontent.com, which
-  // may or may not answer with permissive CORS depending on the asset — on
-  // desktop this always works instead (Node fetch, no CORS at all).
-  els.btnFetchRelease?.addEventListener("click", async () => {
-    els.btnFetchRelease.disabled = true;
-    els.esp32ReleaseLabel.textContent = "fetching…";
-    const method = esp32Method();
-    try {
-      let name, data;
-      if (capabilities.githubReleaseFetch && win.papilioDesktop?.fetchLatestRelease) {
-        ({ name, data } = await win.papilioDesktop.fetchLatestRelease(method));
-      } else {
-        const resp = await fetch(RELEASE_API);
-        if (!resp.ok) throw new Error(`GitHub API HTTP ${resp.status}`);
-        const release = await resp.json();
-        // OTA needs the app-only image, not the -merged.bin (bootloader +
-        // partition table + app) used for USB/Serial esptool flashing —
-        // sending the merged image over OTA fails image validation on the
-        // board (it tries to boot-verify the bootloader bytes as the app).
-        const asset = (release.assets || []).find((a) =>
-          method === "ota"
-            ? /\.bin$/i.test(a.name) && !/-merged\.bin$/i.test(a.name) && !/^(bootloader|partition-table|ota_data_initial)\.bin$/i.test(a.name)
-            : /-merged\.bin$/i.test(a.name)
-        );
-        if (!asset) throw new Error(`No matching .bin asset found in the latest release for ${method} flashing.`);
-        log(`Downloading ${asset.name} from ${release.tag_name}…`);
-        const assetResp = await fetch(asset.browser_download_url);
-        if (!assetResp.ok) throw new Error(`Asset download HTTP ${assetResp.status}`);
-        data = new Uint8Array(await assetResp.arrayBuffer());
-        name = `${asset.name} (${release.tag_name})`;
-      }
-
-      esp32Release = { name, data };
-      els.esp32ReleaseLabel.textContent = name;
-      log(`Fetched ${name} (${data.byteLength} bytes).`, "success");
-    } catch (err) {
-      esp32Release = null;
-      els.esp32ReleaseLabel.textContent = "fetch failed (likely CORS) — switch to \"Upload my own\" instead";
-      log(`Fetch latest release failed: ${err.message}`, "error");
-    } finally {
-      els.btnFetchRelease.disabled = false;
-      updateFlashEsp32Enabled();
-    }
-  });
+  // A merged image contains the ESP-IDF partition table at 0x8000. Images
+  // without that table are app-only binaries and must go through the loader's
+  // inactive-slot protocol rather than being written at flash offset 0x0.
+  function isMergedEsp32Image(data) {
+    return data.length >= 0x8002 && data[0] === 0xe9 && data[0x8000] === 0x50 && data[0x8001] === 0xaa;
+  }
 
   els.btnFlashEsp32.addEventListener("click", async () => {
-    const method = esp32Method();
-    const source = esp32Source();
-
-    let data;
-    if (source === "release") {
-      if (!esp32Release) return;
-      data = esp32Release.data;
-    } else {
-      const file = els.esp32File.files[0];
-      if (!file) return;
-      data = new Uint8Array(await file.arrayBuffer());
-    }
+    const file = els.esp32File.files[0];
+    if (!file) return;
+    const data = new Uint8Array(await file.arrayBuffer());
 
     els.btnFlashEsp32.disabled = true;
     els.progressEsp32.hidden = false;
-    setStatus(els.statusEsp32, method === "ota" ? "Uploading to board over WiFi…" : "Connecting to ESP32…");
 
     try {
-      if (method === "ota") {
-        const responseText = await flashEsp32Ota(otaPoster, deviceIp, data, (loaded, total) => {
+      if (isMergedEsp32Image(data)) {
+        await ensureUsbPort();
+        await stopSerialListener();
+        setStatus(els.statusEsp32, "Connecting to ESP32 over USB…");
+        // Merged images are flashed by esptool in ROM download mode.
+        await flashEsp32(serialPort, data, {
+          onLog: (msg) => log(msg, "success"),
+          onProgress: (written, total) => {
+            const pct = Math.round((written / total) * 100);
+            els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
+          },
+        });
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("ESP32 write complete; USB serial port closed.", "success");
+        setStatus(els.statusEsp32, "ESP32 flashed. Board rebooting automatically.", "ok");
+      } else {
+        setStatus(els.statusEsp32, "App image detected — entering the loader…");
+        await prepareForProgramming(els.statusEsp32);
+        setStatus(els.statusEsp32, "Streaming app image into the inactive slot…");
+        await flashEsp32OverSerial(serialPort, reader, data, (loaded, total) => {
           const pct = total ? Math.round((loaded / total) * 100) : 0;
           els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
         });
-        log(responseText);
-        setStatus(els.statusEsp32, "ESP32 firmware updated over WiFi.", "ok");
-      } else {
-        const usbTarget = esp32UsbTarget();
-        if (usbTarget === "slot") {
-          setStatus(els.statusEsp32, "Streaming app image into the inactive slot…");
-          await flashEsp32OverSerial(serialPort, reader, data, (loaded, total) => {
-            const pct = total ? Math.round((loaded / total) * 100) : 0;
-            els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
-          });
-          setStatus(els.statusEsp32, "ESP32 app flashed into the inactive slot. Board rebooting automatically.", "ok");
-        } else {
-          await flashEsp32(serialPort, data, {
-            onLog: (msg) => log(msg, "success"),
-            onProgress: (written, total) => {
-              const pct = Math.round((written / total) * 100);
-              els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
-            },
-          });
-          setStatus(els.statusEsp32, "ESP32 flashed. Board rebooting automatically.", "ok");
-        }
-        els.btnSendWifi.disabled = false;
-        startSerialListenerWithRetry().catch((err) => log(`Serial listener failed to start: ${err.message}`, "error"));
+        await stopSerialListener();
+        awaitingReconnect = false;
+        log("ESP32 write complete; USB serial port closed.", "success");
+        setStatus(els.statusEsp32, "ESP32 app flashed into the inactive slot. Board rebooting automatically.", "ok");
       }
+      els.btnSendWifi.disabled = false;
     } catch (err) {
       log(`ESP32 flash failed: ${err.message}`, "error");
       setStatus(els.statusEsp32, `Flash failed: ${err.message}`, "error");

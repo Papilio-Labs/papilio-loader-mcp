@@ -63,4 +63,15 @@ describe("SerialLineReader", () => {
     port.simulateDisconnect("The device has been lost.");
     await vi.waitFor(() => expect(disconnected).toHaveBeenCalledTimes(1));
   });
+
+  it("notifies onDisconnect listeners when the readable stream ends normally", async () => {
+    const port = new MockSerialPort();
+    const reader = new SerialLineReader(port);
+    const disconnected = vi.fn();
+    reader.onDisconnect(disconnected);
+    await reader.start();
+
+    await port.close();
+    await vi.waitFor(() => expect(disconnected).toHaveBeenCalledTimes(1));
+  });
 });

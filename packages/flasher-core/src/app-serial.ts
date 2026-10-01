@@ -17,6 +17,24 @@ import type { ProgressCallback } from "./fpga-serial.js";
 
 const CHUNK = 16384;
 
+export async function resumeAppOverSerial(port: SerialLike, reader: SerialLineReader): Promise<void> {
+  if (!port) throw new Error("No USB serial port connected.");
+  if (!reader.isRunning) await reader.start();
+  if (!port.writable) throw new Error("No USB serial port connected.");
+
+  const writer = port.writable.getWriter();
+  try {
+    const resultPromise = reader.waitForLine(/^RESUME_OK$|^RESUME_ERROR /, 10000);
+    await writer.write(new TextEncoder().encode("RESUME_APP\n"));
+    const resultLine = await resultPromise;
+    if (resultLine.startsWith("RESUME_ERROR")) {
+      throw new Error(`Board reported: ${resultLine}`);
+    }
+  } finally {
+    writer.releaseLock();
+  }
+}
+
 export async function flashEsp32OverSerial(
   port: SerialLike,
   reader: SerialLineReader,

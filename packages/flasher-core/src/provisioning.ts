@@ -5,7 +5,7 @@
 import type { SerialLike } from "./transport.js";
 import type { SerialLineReader } from "./serial-log.js";
 
-export const IP_REGEX = /WiFi connected - IP:\s*(\d{1,3}(?:\.\d{1,3}){3})/;
+export const IP_REGEX = /(?:WiFi connected - IP:|wifi=connected\s+ip=)\s*(\d{1,3}(?:\.\d{1,3}){3})/i;
 
 export type ProvisioningStatusKind = "ok" | "error" | undefined;
 

@@ -37,6 +37,8 @@
       <div class="hero-eyebrow">Web Edition</div>
       <h1 class="section-title">Papilio Loader — Device Flash Manager</h1>
       <p class="section-sub">
+        Select an FPGA or ESP32 file, then press Program. The loader connects over USB,
+        enters the device loader automatically, and chooses the best available transfer path.
         The same USB/Serial + OTA/WiFi flashing the
         <a href="https://github.com/Papilio-Labs/papilio-loader-mcp" target="_blank" rel="noopener">Papilio Loader desktop app</a>
         does, running entirely in this browser tab via WebSerial and direct network requests — nothing installed.
@@ -50,7 +52,7 @@
     </div>
 
     <!-- CONNECT & LOCATE DEVICE -->
-    <section class="flash-step" id="step-connect">
+    <section class="flash-step" id="step-connect" hidden>
       <div class="flash-step-header">
         <h2>Connect &amp; Locate Device</h2>
       </div>
@@ -106,39 +108,15 @@
       <section class="loader-card" id="card-fpga">
         <h2>📟 FPGA Flash (Gowin)</h2>
 
-        <div class="method-group" role="radiogroup" aria-label="FPGA flash method">
-          <label class="method-option">
-            <input type="radio" name="fpga-method" value="ota" checked>
-            <span>📡 OTA (WiFi)</span>
-          </label>
-          <label class="method-option">
-            <input type="radio" name="fpga-method" value="usb">
-            <span>🔌 USB/Serial</span>
-          </label>
-        </div>
-
-        <p class="card-note">
-          No published core bitstream releases yet — upload a Gowin headerless <strong>.bin</strong>
-          (&quot;Binary File&quot; export) from your own build.
-        </p>
-
         <label class="file-picker">
           <input type="file" id="fpga-file" accept=".bin">
           <span id="fpga-file-label">Choose bitstream .bin&hellip;</span>
         </label>
-
-        <select id="fpga-target">
-          <option value="/fpga-update">SPI Flash (persistent)</option>
-          <option value="/fpga-jtag-sram">JTAG SRAM (fast, volatile)</option>
-        </select>
-
         <p class="card-note">
-          <strong>SPI Flash</strong> survives a power cycle (the board briefly loads a small
-          bridge bitstream first, then writes yours to the FPGA's own flash chip).
-          <strong>JTAG SRAM</strong> is faster but lost on power cycle.
+          Programs the FPGA's persistent SPI Flash automatically.
         </p>
 
-        <button id="btn-flash-fpga" class="btn btn-primary" disabled>⚡ Flash FPGA</button>
+        <button id="btn-flash-fpga" class="btn btn-primary" disabled>⚡ Program FPGA</button>
         <div class="progress" id="progress-fpga" hidden>
           <div class="progress-bar" style="width:0%"></div>
         </div>
@@ -148,54 +126,15 @@
       <!-- ESP32 CARD -->
       <section class="loader-card" id="card-esp32">
         <h2>🔧 ESP32 Flash</h2>
-
-        <div class="method-group" role="radiogroup" aria-label="ESP32 flash method">
-          <label class="method-option">
-            <input type="radio" name="esp32-method" value="usb" checked>
-            <span>🔌 USB/Serial</span>
-          </label>
-          <label class="method-option">
-            <input type="radio" name="esp32-method" value="ota">
-            <span>📡 OTA (WiFi)</span>
-          </label>
-        </div>
-        <p class="card-note">
-          OTA firmware updates only work once a board is already running the loader — a
-          brand-new board needs USB/Serial the first time.
-        </p>
-
-        <div class="method-group" id="esp32-usb-target-group" role="radiogroup" aria-label="ESP32 USB/Serial flash target">
-          <label class="method-option">
-            <input type="radio" name="esp32-usb-target" value="full" checked>
-            <span>🆕 Fresh/blank board (whole chip, offset 0x0)</span>
-          </label>
-          <label class="method-option">
-            <input type="radio" name="esp32-usb-target" value="slot">
-            <span>🔁 Board already runs the loader (app image only, into the inactive slot)</span>
-          </label>
-        </div>
-
-        <div class="source-group" role="radiogroup" aria-label="ESP32 firmware source">
-          <label class="method-option">
-            <input type="radio" name="esp32-source" value="upload" checked>
-            <span>📁 Upload my own</span>
-          </label>
-          <label class="method-option">
-            <input type="radio" name="esp32-source" value="release">
-            <span>☁️ Try latest official release</span>
-          </label>
-        </div>
-
-        <div id="esp32-release-fields" hidden>
-          <button id="btn-fetch-release" class="btn btn-outline" type="button">Fetch Latest Release</button>
-          <span id="esp32-release-label">not fetched yet — GitHub's CDN often blocks this from a browser (CORS); fall back to "Upload my own" if it fails</span>
-        </div>
-        <label class="file-picker" id="esp32-upload-fields">
+        <label class="file-picker">
           <input type="file" id="esp32-file" accept=".bin">
-          <span id="esp32-file-label">Choose *-merged.bin&hellip;</span>
+          <span id="esp32-file-label">Choose ESP32 firmware .bin&hellip;</span>
         </label>
 
-        <button id="btn-flash-esp32" class="btn btn-primary" disabled>⚡ Flash ESP32</button>
+        <p class="card-note">
+          Detects app-only or merged firmware automatically, then programs it using the safe path.
+        </p>
+        <button id="btn-flash-esp32" class="btn btn-primary" disabled>⚡ Program ESP32</button>
         <div class="progress" id="progress-esp32" hidden>
           <div class="progress-bar" style="width:0%"></div>
         </div>

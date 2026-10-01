@@ -19,6 +19,9 @@ describe("provisioning", () => {
   it("IP_REGEX captures the device IP from a boot log line", () => {
     const match = "WiFi connected - IP: 10.0.4.35".match(IP_REGEX);
     expect(match?.[1]).toBe("10.0.4.35");
+
+    const loaderStatus = "I (10803) loader-phase1: alive -- running from 'factory' -- wifi=connected ip=10.0.4.100".match(IP_REGEX);
+    expect(loaderStatus?.[1]).toBe("10.0.4.100");
   });
 
   it("watchProvisioningLine reports IP and status transitions", () => {

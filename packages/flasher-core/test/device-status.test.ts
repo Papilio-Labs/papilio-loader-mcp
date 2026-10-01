@@ -6,6 +6,10 @@ describe("classifyBootLogLine", () => {
     expect(classifyBootLogLine("Papilio ESP Bootloader -- Phase 4 (USB-serial fallback)")).toBe("loader");
   });
 
+  it("recognizes the loader's periodic phase status line", () => {
+    expect(classifyBootLogLine("I (136684) loader-phase1: alive -- running from 'factory' -- wifi=connected ip=10.0.4.100")).toBe("loader");
+  });
+
   it("recognizes FPGA-Companion's ASCII boot banner", () => {
     expect(classifyBootLogLine("           FPGA Companion for ESP32-S2/S3")).toBe("app");
   });
