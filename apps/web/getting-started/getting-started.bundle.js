@@ -9422,6 +9422,21 @@ async function flashEsp32(port, data, options = {}) {
   }
 }
 
+// ../../packages/flasher-core/dist/image-type.js
+var ESP32_IMAGE_MAGIC = 233;
+var GOWIN_PREAMBLE_LENGTH = 22;
+var GOWIN_SYNC_A5 = 165;
+var GOWIN_SYNC_C3 = 195;
+function detectBinaryImageType(data) {
+  if (data.length > 0 && data[0] === ESP32_IMAGE_MAGIC) {
+    return "esp32";
+  }
+  if (data.length >= GOWIN_PREAMBLE_LENGTH + 2 && data.subarray(0, GOWIN_PREAMBLE_LENGTH).every((value) => value === 255) && data[GOWIN_PREAMBLE_LENGTH] === GOWIN_SYNC_A5 && data[GOWIN_PREAMBLE_LENGTH + 1] === GOWIN_SYNC_C3) {
+    return "fpga";
+  }
+  return "unknown";
+}
+
 // ../../packages/loader-ui/src/dom.js
 function makeLogger(logEl) {
   return function log(line, kind) {
@@ -9481,6 +9496,8 @@ function initFlashPage(doc = document) {
   const otaPoster = createBrowserXhrPoster();
   let serialPort = null;
   let reader = null;
+  let esp32ImageType = null;
+  let fpgaImageType = null;
   let deviceIp = null;
   let awaitingReconnect = false;
   let bundledFirmware = null;
@@ -9560,25 +9577,29 @@ function initFlashPage(doc = document) {
     setStatus(els.statusWifi, `Board connected \u2014 IP ${ip}`, "ok");
     updateFlashFpgaEnabled();
   }
-  els.esp32File.addEventListener("change", () => {
+  els.esp32File.addEventListener("change", async () => {
     const file = els.esp32File.files[0];
     els.esp32FileLabel.textContent = file ? file.name : "Choose *-merged.bin\u2026";
+    esp32ImageType = file ? detectBinaryImageType(new Uint8Array(await file.arrayBuffer())) : null;
+    if (file && esp32ImageType !== "esp32") setStatus(els.statusEsp32, "Selected file is not ESP32 firmware.", "error");
     updateFlashEsp32Enabled();
   });
-  els.fpgaFile.addEventListener("change", () => {
+  els.fpgaFile.addEventListener("change", async () => {
     const file = els.fpgaFile.files[0];
     els.fpgaFileLabel.textContent = file ? file.name : "Choose bitstream .bin\u2026";
+    fpgaImageType = file ? detectBinaryImageType(new Uint8Array(await file.arrayBuffer())) : null;
+    if (file && fpgaImageType !== "fpga") setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
     updateFlashFpgaEnabled();
   });
   els.fpgaTarget.addEventListener("change", updateFlashFpgaEnabled);
   function updateFlashEsp32Enabled() {
-    const hasFirmware = Boolean(els.esp32File.files[0]) || Boolean(bundledFirmware);
+    const hasFirmware = Boolean(bundledFirmware) || Boolean(els.esp32File.files[0]) && esp32ImageType === "esp32";
     els.btnFlashEsp32.disabled = !(serialPort && hasFirmware);
   }
   function updateFlashFpgaEnabled() {
     const isRecovery = els.fpgaTarget.value === "/fpga-recover";
     const hasTransport = Boolean(deviceIp || serialPort);
-    const hasFile = isRecovery ? Boolean(deviceIp) : Boolean(els.fpgaFile.files[0]);
+    const hasFile = isRecovery ? Boolean(deviceIp) : Boolean(els.fpgaFile.files[0]) && fpgaImageType === "fpga";
     els.btnFlashFpga.disabled = !(hasTransport && hasFile);
   }
   function validateFpgaFileTarget(file, target) {
@@ -9616,6 +9637,10 @@ function initFlashPage(doc = document) {
       let data;
       if (customFile) {
         data = new Uint8Array(await customFile.arrayBuffer());
+        if (detectBinaryImageType(data) !== "esp32") {
+          setStatus(els.statusEsp32, "Selected file is not ESP32 firmware.", "error");
+          return;
+        }
       } else {
         const resp = await fetch(`firmware/${bundledFirmware.fileName}`);
         if (!resp.ok) throw new Error(`Firmware download failed (HTTP ${resp.status})`);
@@ -9713,6 +9738,10 @@ function initFlashPage(doc = document) {
     setStatus(els.statusFpga, "Uploading to board\u2026");
     try {
       const body = isRecovery ? new ArrayBuffer(0) : await file.arrayBuffer();
+      if (!isRecovery && detectBinaryImageType(new Uint8Array(body)) !== "fpga") {
+        setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
+        return;
+      }
       let usedPath = null;
       if (deviceIp) {
         try {

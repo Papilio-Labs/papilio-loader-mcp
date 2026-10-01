@@ -9578,6 +9578,21 @@ function classifyStatusResponseText(bodyText) {
   return "unknown";
 }
 
+// ../../packages/flasher-core/dist/image-type.js
+var ESP32_IMAGE_MAGIC = 233;
+var GOWIN_PREAMBLE_LENGTH = 22;
+var GOWIN_SYNC_A5 = 165;
+var GOWIN_SYNC_C3 = 195;
+function detectBinaryImageType(data) {
+  if (data.length > 0 && data[0] === ESP32_IMAGE_MAGIC) {
+    return "esp32";
+  }
+  if (data.length >= GOWIN_PREAMBLE_LENGTH + 2 && data.subarray(0, GOWIN_PREAMBLE_LENGTH).every((value) => value === 255) && data[GOWIN_PREAMBLE_LENGTH] === GOWIN_SYNC_A5 && data[GOWIN_PREAMBLE_LENGTH + 1] === GOWIN_SYNC_C3) {
+    return "fpga";
+  }
+  return "unknown";
+}
+
 // ../../packages/loader-ui/src/dom.js
 function makeLogger(logEl) {
   return function log(line, kind) {
@@ -9653,6 +9668,8 @@ function initLoaderPage(doc = document, win = window) {
   let reader = null;
   let deviceIp = null;
   let awaitingReconnect = false;
+  let fpgaImageType = null;
+  let esp32ImageType = null;
   let recoveryWatch = null;
   const reconnectWaiters = /* @__PURE__ */ new Set();
   els.btnClearLog?.addEventListener("click", () => {
@@ -10032,10 +10049,13 @@ function initLoaderPage(doc = document, win = window) {
   els.fpgaFile.addEventListener("change", () => {
     const file = els.fpgaFile.files[0];
     els.fpgaFileLabel.textContent = file ? file.name : "Choose bitstream .bin\u2026";
-    updateFlashFpgaEnabled();
+    validateSelectedFile(file, "fpga").then((type) => {
+      fpgaImageType = type;
+      updateFlashFpgaEnabled();
+    });
   });
   function updateFlashFpgaEnabled() {
-    els.btnFlashFpga.disabled = !els.fpgaFile.files[0];
+    els.btnFlashFpga.disabled = !els.fpgaFile.files[0] || fpgaImageType !== "fpga";
   }
   function validateFpgaFile(file) {
     if (!file) return null;
@@ -10043,6 +10063,20 @@ function initLoaderPage(doc = document, win = window) {
       return 'Only .bin (Gowin "Binary File") bitstreams are supported \u2014 .fs files are not yet parsed by the firmware.';
     }
     return null;
+  }
+  async function validateSelectedFile(file, expectedType) {
+    if (!file) return null;
+    const extensionError = expectedType === "fpga" ? validateFpgaFile(file) : null;
+    if (extensionError) {
+      setStatus(expectedType === "fpga" ? els.statusFpga : els.statusEsp32, extensionError, "error");
+      return "unknown";
+    }
+    const type = detectBinaryImageType(new Uint8Array(await file.arrayBuffer()));
+    if (type !== expectedType) {
+      const label = expectedType === "fpga" ? "a Gowin FPGA bitstream" : "ESP32 firmware";
+      setStatus(expectedType === "fpga" ? els.statusFpga : els.statusEsp32, `Selected file is not ${label}.`, "error");
+    }
+    return type;
   }
   function updateFpgaProgress(loaded, total) {
     const pct = total ? Math.round(loaded / total * 100) : 0;
@@ -10060,6 +10094,10 @@ function initLoaderPage(doc = document, win = window) {
     updateFpgaProgress(0, 1);
     try {
       const body = await file.arrayBuffer();
+      if (detectBinaryImageType(new Uint8Array(body)) !== "fpga") {
+        setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
+        return;
+      }
       const ip = await prepareForProgramming(els.statusFpga);
       if (ip) {
         const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);
@@ -10086,10 +10124,13 @@ function initLoaderPage(doc = document, win = window) {
   els.esp32File.addEventListener("change", () => {
     const file = els.esp32File.files[0];
     els.esp32FileLabel.textContent = file ? file.name : "Choose ESP32 firmware .bin\u2026";
-    updateFlashEsp32Enabled();
+    validateSelectedFile(file, "esp32").then((type) => {
+      esp32ImageType = type;
+      updateFlashEsp32Enabled();
+    });
   });
   function updateFlashEsp32Enabled() {
-    els.btnFlashEsp32.disabled = !els.esp32File.files[0];
+    els.btnFlashEsp32.disabled = !els.esp32File.files[0] || esp32ImageType !== "esp32";
   }
   function isMergedEsp32Image(data) {
     return data.length >= 32770 && data[0] === 233 && data[32768] === 80 && data[32769] === 170;
@@ -10098,6 +10139,11 @@ function initLoaderPage(doc = document, win = window) {
     const file = els.esp32File.files[0];
     if (!file) return;
     const data = new Uint8Array(await file.arrayBuffer());
+    if (detectBinaryImageType(data) !== "esp32") {
+      setStatus(els.statusEsp32, "Selected file is not ESP32 firmware.", "error");
+      updateFlashEsp32Enabled();
+      return;
+    }
     els.btnFlashEsp32.disabled = true;
     els.progressEsp32.hidden = false;
     try {

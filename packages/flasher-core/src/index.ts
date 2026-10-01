@@ -8,3 +8,4 @@ export * from "./esp32.js";
 export * from "./capabilities.js";
 export * from "./recovery.js";
 export * from "./device-status.js";
+export * from "./image-type.js";

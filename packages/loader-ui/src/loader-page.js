@@ -26,6 +26,7 @@ import {
   detectCapabilities,
   classifyStatusResponseText,
   classifyBootLogLine,
+  detectBinaryImageType,
 } from "@papilio-loader/flasher-core";
 import { makeLogger, setStatus } from "./dom.js";
 
@@ -88,6 +89,8 @@ export function initLoaderPage(doc = document, win = window) {
   let reader = null;
   let deviceIp = null;
   let awaitingReconnect = false;
+  let fpgaImageType = null;
+  let esp32ImageType = null;
   let recoveryWatch = null; // { resolve } while a Recover-via-USB boot-log classification is armed
   const reconnectWaiters = new Set();
 
@@ -567,11 +570,14 @@ export function initLoaderPage(doc = document, win = window) {
   els.fpgaFile.addEventListener("change", () => {
     const file = els.fpgaFile.files[0];
     els.fpgaFileLabel.textContent = file ? file.name : "Choose bitstream .bin…";
-    updateFlashFpgaEnabled();
+    validateSelectedFile(file, "fpga").then((type) => {
+      fpgaImageType = type;
+      updateFlashFpgaEnabled();
+    });
   });
 
   function updateFlashFpgaEnabled() {
-    els.btnFlashFpga.disabled = !els.fpgaFile.files[0];
+    els.btnFlashFpga.disabled = !els.fpgaFile.files[0] || fpgaImageType !== "fpga";
   }
 
   function validateFpgaFile(file) {
@@ -580,6 +586,21 @@ export function initLoaderPage(doc = document, win = window) {
       return "Only .bin (Gowin \"Binary File\") bitstreams are supported — .fs files are not yet parsed by the firmware.";
     }
     return null;
+  }
+
+  async function validateSelectedFile(file, expectedType) {
+    if (!file) return null;
+    const extensionError = expectedType === "fpga" ? validateFpgaFile(file) : null;
+    if (extensionError) {
+      setStatus(expectedType === "fpga" ? els.statusFpga : els.statusEsp32, extensionError, "error");
+      return "unknown";
+    }
+    const type = detectBinaryImageType(new Uint8Array(await file.arrayBuffer()));
+    if (type !== expectedType) {
+      const label = expectedType === "fpga" ? "a Gowin FPGA bitstream" : "ESP32 firmware";
+      setStatus(expectedType === "fpga" ? els.statusFpga : els.statusEsp32, `Selected file is not ${label}.`, "error");
+    }
+    return type;
   }
 
   function updateFpgaProgress(loaded, total) {
@@ -602,6 +623,10 @@ export function initLoaderPage(doc = document, win = window) {
 
     try {
       const body = await file.arrayBuffer();
+      if (detectBinaryImageType(new Uint8Array(body)) !== "fpga") {
+        setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
+        return;
+      }
       const ip = await prepareForProgramming(els.statusFpga);
 
       if (ip) {
@@ -635,11 +660,14 @@ export function initLoaderPage(doc = document, win = window) {
   els.esp32File.addEventListener("change", () => {
     const file = els.esp32File.files[0];
     els.esp32FileLabel.textContent = file ? file.name : "Choose ESP32 firmware .bin…";
-    updateFlashEsp32Enabled();
+    validateSelectedFile(file, "esp32").then((type) => {
+      esp32ImageType = type;
+      updateFlashEsp32Enabled();
+    });
   });
 
   function updateFlashEsp32Enabled() {
-    els.btnFlashEsp32.disabled = !els.esp32File.files[0];
+    els.btnFlashEsp32.disabled = !els.esp32File.files[0] || esp32ImageType !== "esp32";
   }
 
   // A merged image contains the ESP-IDF partition table at 0x8000. Images
@@ -653,6 +681,11 @@ export function initLoaderPage(doc = document, win = window) {
     const file = els.esp32File.files[0];
     if (!file) return;
     const data = new Uint8Array(await file.arrayBuffer());
+    if (detectBinaryImageType(data) !== "esp32") {
+      setStatus(els.statusEsp32, "Selected file is not ESP32 firmware.", "error");
+      updateFlashEsp32Enabled();
+      return;
+    }
 
     els.btnFlashEsp32.disabled = true;
     els.progressEsp32.hidden = false;

@@ -12,6 +12,7 @@ import {
   flashFpgaOta,
   resumeEsp32Ota,
   createBrowserXhrPoster,
+  detectBinaryImageType,
 } from "@papilio-loader/flasher-core";
 import { makeLogger, setStatus } from "./dom.js";
 
@@ -53,6 +54,8 @@ export function initFlashPage(doc = document) {
 
   let serialPort = null;
   let reader = null;
+  let esp32ImageType = null;
+  let fpgaImageType = null;
   let deviceIp = null;
   let awaitingReconnect = false;
   // Bundled firmware manifest (same-origin firmware/manifest.json, written by
@@ -159,29 +162,33 @@ export function initFlashPage(doc = document) {
   /* File pickers                                                          */
   /* -------------------------------------------------------------------- */
 
-  els.esp32File.addEventListener("change", () => {
+  els.esp32File.addEventListener("change", async () => {
     const file = els.esp32File.files[0];
     els.esp32FileLabel.textContent = file ? file.name : "Choose *-merged.bin…";
+    esp32ImageType = file ? detectBinaryImageType(new Uint8Array(await file.arrayBuffer())) : null;
+    if (file && esp32ImageType !== "esp32") setStatus(els.statusEsp32, "Selected file is not ESP32 firmware.", "error");
     updateFlashEsp32Enabled();
   });
 
-  els.fpgaFile.addEventListener("change", () => {
+  els.fpgaFile.addEventListener("change", async () => {
     const file = els.fpgaFile.files[0];
     els.fpgaFileLabel.textContent = file ? file.name : "Choose bitstream .bin…";
+    fpgaImageType = file ? detectBinaryImageType(new Uint8Array(await file.arrayBuffer())) : null;
+    if (file && fpgaImageType !== "fpga") setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
     updateFlashFpgaEnabled();
   });
 
   els.fpgaTarget.addEventListener("change", updateFlashFpgaEnabled);
 
   function updateFlashEsp32Enabled() {
-    const hasFirmware = Boolean(els.esp32File.files[0]) || Boolean(bundledFirmware);
+    const hasFirmware = Boolean(bundledFirmware) || (Boolean(els.esp32File.files[0]) && esp32ImageType === "esp32");
     els.btnFlashEsp32.disabled = !(serialPort && hasFirmware);
   }
 
   function updateFlashFpgaEnabled() {
     const isRecovery = els.fpgaTarget.value === "/fpga-recover";
     const hasTransport = Boolean(deviceIp || serialPort);
-    const hasFile = isRecovery ? Boolean(deviceIp) : Boolean(els.fpgaFile.files[0]);
+    const hasFile = isRecovery ? Boolean(deviceIp) : Boolean(els.fpgaFile.files[0]) && fpgaImageType === "fpga";
     els.btnFlashFpga.disabled = !(hasTransport && hasFile);
   }
 
@@ -231,6 +238,10 @@ export function initFlashPage(doc = document) {
       let data;
       if (customFile) {
         data = new Uint8Array(await customFile.arrayBuffer());
+        if (detectBinaryImageType(data) !== "esp32") {
+          setStatus(els.statusEsp32, "Selected file is not ESP32 firmware.", "error");
+          return;
+        }
       } else {
         const resp = await fetch(`firmware/${bundledFirmware.fileName}`);
         if (!resp.ok) throw new Error(`Firmware download failed (HTTP ${resp.status})`);
@@ -352,6 +363,10 @@ export function initFlashPage(doc = document) {
 
     try {
       const body = isRecovery ? new ArrayBuffer(0) : await file.arrayBuffer();
+      if (!isRecovery && detectBinaryImageType(new Uint8Array(body)) !== "fpga") {
+        setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
+        return;
+      }
       let usedPath = null;
 
       if (deviceIp) {
