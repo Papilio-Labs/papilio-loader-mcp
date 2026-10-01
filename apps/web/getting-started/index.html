@@ -50,7 +50,11 @@
     </div>
 
     <!-- Global log / terminal -->
-    <details class="flash-log-wrap">
+    <div class="flash-log-controls">
+      <button id="btn-open-log" class="btn btn-outline">Open Log</button>
+      <button id="btn-close-log" class="btn btn-outline">Close Log</button>
+    </div>
+    <details class="flash-log-wrap" id="flash-log-wrap">
       <summary>Serial log</summary>
       <pre id="flash-log" class="flash-log" aria-live="polite"></pre>
     </details>
@@ -143,6 +147,18 @@
         </select>
         <button id="btn-flash-fpga" class="btn btn-primary" disabled>Flash FPGA</button>
       </div>
+
+      <details class="flash-advanced" id="loader-advanced">
+        <summary>Advanced options</summary>
+        <div class="flash-row">
+          <label for="transport-preference">FPGA transport</label>
+          <select id="transport-preference">
+            <option value="auto">Auto (OTA when available)</option>
+            <option value="ota">OTA / WiFi only</option>
+            <option value="usb">USB / Serial only</option>
+          </select>
+        </div>
+      </details>
 
       <div class="progress" id="progress-fpga" hidden>
         <div class="progress-bar" style="width:0%"></div>

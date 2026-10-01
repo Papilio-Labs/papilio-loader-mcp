@@ -36,7 +36,10 @@ export function initLoaderPage(doc = document, win = window) {
   const els = {
     unsupportedBanner: doc.getElementById("unsupported-banner"),
     log: doc.getElementById("loader-log"),
+    btnOpenLog: doc.getElementById("btn-open-log"),
+    btnCloseLog: doc.getElementById("btn-close-log"),
     btnClearLog: doc.getElementById("btn-clear-log"),
+    transportPreference: doc.getElementById("transport-preference"),
 
     btnConnect: doc.getElementById("btn-connect"),
     btnFindIp: doc.getElementById("btn-find-ip"),
@@ -91,11 +94,45 @@ export function initLoaderPage(doc = document, win = window) {
   let awaitingReconnect = false;
   let fpgaImageType = null;
   let esp32ImageType = null;
+  let transportPreference = els.transportPreference?.value || "auto";
   let recoveryWatch = null; // { resolve } while a Recover-via-USB boot-log classification is armed
   const reconnectWaiters = new Set();
 
   els.btnClearLog?.addEventListener("click", () => {
     els.log.textContent = "";
+  });
+  els.btnOpenLog?.addEventListener("click", async () => {
+    try {
+      if (!serialPort) {
+        serialPort = await navigator.serial.requestPort();
+        reader = new SerialLineReader(serialPort);
+        wireReaderEvents();
+        log("Serial port selected for log monitoring.");
+      }
+      await startSerialListener();
+      els.log.hidden = false;
+      setStatus(els.statusConnect, "USB log connection open.", "ok");
+    } catch (err) {
+      log(`Open log failed: ${err.message}`, "error");
+      setStatus(els.statusConnect, `Open log failed: ${err.message}`, "error");
+    }
+  });
+  els.btnCloseLog?.addEventListener("click", async () => {
+    try {
+      await stopSerialListener();
+      serialPort = null;
+      reader = null;
+      awaitingReconnect = false;
+      setStatus(els.statusConnect, "USB log connection closed.");
+      updateFlashFpgaEnabled();
+      updateFlashEsp32Enabled();
+    } catch (err) {
+      log(`Close log failed: ${err.message}`, "error");
+      setStatus(els.statusConnect, `Close log failed: ${err.message}`, "error");
+    }
+  });
+  els.transportPreference?.addEventListener("change", () => {
+    transportPreference = els.transportPreference.value;
   });
 
   if (!capabilities.webSerial) {
@@ -107,6 +144,8 @@ export function initLoaderPage(doc = document, win = window) {
       els.btnFlashFpga,
       els.btnFlashEsp32,
       els.btnRecoverUsb,
+      els.btnOpenLog,
+      els.btnCloseLog,
     ].forEach((btn) => btn && (btn.disabled = true));
     return;
   }
@@ -270,7 +309,7 @@ export function initLoaderPage(doc = document, win = window) {
     });
   }
 
-  async function prepareForProgramming(statusElement) {
+  async function prepareForProgramming(statusElement, preference = "auto") {
     await ensureUsbPort();
 
     await stopSerialListener();
@@ -297,8 +336,16 @@ export function initLoaderPage(doc = document, win = window) {
       throw new Error("The board did not boot into the loader.");
     }
 
+    if (preference === "usb") {
+      setStatus(statusElement, "Loader ready — using USB serial.");
+      return null;
+    }
+
     setStatus(statusElement, "Loader ready — looking for WiFi…");
     const ip = await waitForDeviceIp();
+    if (preference === "ota" && !ip) {
+      throw new Error("OTA / WiFi was selected, but the loader did not report an IP address.");
+    }
     if (ip) log(`Loader found at ${ip}; using OTA where supported.`);
     else log("Loader WiFi not available; using USB serial.");
     return ip;
@@ -627,7 +674,7 @@ export function initLoaderPage(doc = document, win = window) {
         setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
         return;
       }
-      const ip = await prepareForProgramming(els.statusFpga);
+      const ip = await prepareForProgramming(els.statusFpga, transportPreference);
 
       if (ip) {
         const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);

@@ -101,6 +101,18 @@
       <p class="flash-status" id="status-recover"></p>
     </section>
 
+    <details class="flash-advanced" id="loader-advanced">
+      <summary>Advanced options</summary>
+      <div class="flash-row">
+        <label for="transport-preference">FPGA transport</label>
+        <select id="transport-preference">
+          <option value="auto">Auto (OTA when available)</option>
+          <option value="ota">OTA / WiFi only</option>
+          <option value="usb">USB / Serial only</option>
+        </select>
+      </div>
+    </details>
+
     <!-- CARDS -->
     <div class="loader-cards">
 
@@ -144,10 +156,14 @@
     </div>
 
     <!-- STATUS LOG -->
-    <section class="status-log-section">
+    <section class="status-log-section" id="loader-log-section">
       <div class="status-log-header">
         <h2>Status Log</h2>
-        <button id="btn-clear-log" class="btn btn-outline">🗑️ Clear Log</button>
+        <div class="flash-row log-controls">
+          <button id="btn-open-log" class="btn btn-outline">Open Log</button>
+          <button id="btn-close-log" class="btn btn-outline">Close Log</button>
+          <button id="btn-clear-log" class="btn btn-outline">Clear Log</button>
+        </div>
       </div>
       <div id="loader-log" class="status-log" aria-live="polite"></div>
     </section>

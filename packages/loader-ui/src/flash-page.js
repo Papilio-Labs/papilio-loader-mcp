@@ -20,6 +20,9 @@ export function initFlashPage(doc = document) {
   const els = {
     unsupportedBanner: doc.getElementById("unsupported-banner"),
     log: doc.getElementById("flash-log"),
+    logWrap: doc.getElementById("flash-log-wrap"),
+    btnOpenLog: doc.getElementById("btn-open-log"),
+    btnCloseLog: doc.getElementById("btn-close-log"),
 
     esp32File: doc.getElementById("esp32-file"),
     esp32FileLabel: doc.getElementById("esp32-file-label"),
@@ -45,12 +48,48 @@ export function initFlashPage(doc = document) {
     btnFlashFpga: doc.getElementById("btn-flash-fpga"),
     progressFpga: doc.getElementById("progress-fpga"),
     statusFpga: doc.getElementById("status-fpga"),
+    transportPreference: doc.getElementById("transport-preference"),
   };
 
   if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
 
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
+  let transportPreference = els.transportPreference?.value || "auto";
+
+  els.btnOpenLog?.addEventListener("click", async () => {
+    try {
+      if (!serialPort) {
+        serialPort = await navigator.serial.requestPort();
+        reader = new SerialLineReader(serialPort);
+        wireReaderEvents();
+        log("Serial port selected for log monitoring.");
+      }
+      await startSerialListener();
+      els.logWrap.open = true;
+      setStatus(els.statusWifi, "USB log connection open.", "ok");
+    } catch (err) {
+      log(`Open log failed: ${err.message}`);
+      setStatus(els.statusWifi, `Open log failed: ${err.message}`, "error");
+    }
+  });
+  els.btnCloseLog?.addEventListener("click", async () => {
+    try {
+      await closeSerialSession();
+      serialPort = null;
+      reader = null;
+      awaitingReconnect = false;
+      setStatus(els.statusWifi, "USB log connection closed.");
+      updateFlashEsp32Enabled();
+      updateFlashFpgaEnabled();
+    } catch (err) {
+      log(`Close log failed: ${err.message}`);
+      setStatus(els.statusWifi, `Close log failed: ${err.message}`, "error");
+    }
+  });
+  els.transportPreference?.addEventListener("change", () => {
+    transportPreference = els.transportPreference.value;
+  });
 
   let serialPort = null;
   let reader = null;
@@ -66,7 +105,7 @@ export function initFlashPage(doc = document) {
 
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
-    [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFindIp].forEach(
+    [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFindIp, els.btnOpenLog, els.btnCloseLog].forEach(
       (btn) => (btn.disabled = true)
     );
     return;
@@ -369,7 +408,11 @@ export function initFlashPage(doc = document) {
       }
       let usedPath = null;
 
-      if (deviceIp) {
+      if (transportPreference === "ota" && !deviceIp) {
+        throw new Error("OTA / WiFi was selected, but the device IP is not available.");
+      }
+
+      if (transportPreference !== "usb" && deviceIp) {
         try {
           setStatus(els.statusFpga, "Uploading to board over WiFi…");
           const responseText = await flashFpgaOta(otaPoster, deviceIp, target, body, updateFpgaProgress);
