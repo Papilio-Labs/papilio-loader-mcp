@@ -129,6 +129,20 @@
   margin-bottom: 1.5rem;
 }
 
+.advanced-section summary {
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.advanced-section[open] summary {
+  margin-bottom: 0.75rem;
+}
+
+.advanced-section-body {
+  padding-top: 0.25rem;
+}
+
 .status-log-header {
   display: flex;
   align-items: center;

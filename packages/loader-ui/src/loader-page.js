@@ -20,7 +20,6 @@ import {
   resumeAppOverSerial,
   flashFpgaOta,
   resumeEsp32Ota,
-  requestGotoLoader,
   fetchDeviceStatusText,
   createBrowserXhrPoster,
   detectCapabilities,
@@ -146,6 +145,8 @@ export function initLoaderPage(doc = document, win = window) {
       els.btnRecoverUsb,
       els.btnOpenLog,
       els.btnCloseLog,
+      els.btnGotoLoader,
+      els.btnResumeApp,
     ].forEach((btn) => btn && (btn.disabled = true));
     return;
   }
@@ -362,12 +363,12 @@ export function initLoaderPage(doc = document, win = window) {
       const bodyText = await fetchDeviceStatusText(deviceIp);
       const role = classifyStatusResponseText(bodyText);
       setStatus(els.deviceRole, role, role === "unknown" ? undefined : "ok");
-      els.btnGotoLoader.disabled = role !== "app";
-      els.btnResumeApp.disabled = role !== "loader";
+      els.btnGotoLoader.disabled = false;
+      els.btnResumeApp.disabled = false;
     } catch (err) {
       setStatus(els.deviceRole, "unreachable", "error");
-      els.btnGotoLoader.disabled = true;
-      els.btnResumeApp.disabled = true;
+      els.btnGotoLoader.disabled = false;
+      els.btnResumeApp.disabled = false;
       log(`Status check failed: ${err.message}`, "error");
     } finally {
       els.btnCheckStatus.disabled = !deviceIp;
@@ -386,8 +387,8 @@ export function initLoaderPage(doc = document, win = window) {
         const bodyText = await fetchDeviceStatusText(deviceIp);
         const role = classifyStatusResponseText(bodyText);
         setStatus(els.deviceRole, role, role === "unknown" ? undefined : "ok");
-        els.btnGotoLoader.disabled = role !== "app";
-        els.btnResumeApp.disabled = role !== "loader";
+        els.btnGotoLoader.disabled = false;
+        els.btnResumeApp.disabled = false;
         els.btnCheckStatus.disabled = false;
         setStatus(els.statusRecover, "Board is back — status updated above.", "ok");
         return;
@@ -396,8 +397,8 @@ export function initLoaderPage(doc = document, win = window) {
       }
     }
     setStatus(els.deviceRole, "unreachable", "error");
-    els.btnGotoLoader.disabled = true;
-    els.btnResumeApp.disabled = true;
+    els.btnGotoLoader.disabled = false;
+    els.btnResumeApp.disabled = false;
     els.btnCheckStatus.disabled = false;
     setStatus(
       els.statusRecover,
@@ -410,37 +411,30 @@ export function initLoaderPage(doc = document, win = window) {
 
   els.btnGotoLoader.addEventListener("click", async () => {
     els.btnGotoLoader.disabled = true;
-    setStatus(els.statusRecover, "Requesting reboot into the loader over WiFi\u2026");
+    setStatus(els.statusRecover, "Opening USB and starting the ESP bootloader\u2026");
     try {
-      const status = await requestGotoLoader(deviceIp);
-      setStatus(els.statusRecover, `Reboot requested (HTTP ${status}) — board is rebooting into the loader.`, "ok");
+      await prepareForProgramming(els.statusRecover, "ota");
+      setStatus(els.statusRecover, "ESP bootloader started over USB.", "ok");
     } catch (err) {
-      // The board reboots right after answering, so a network error here
-      // usually just means the response never made it back over WiFi, not
-      // that the request failed (see phase7-host-tooling-hardware-validation
-      // repo memory: /goto-loader, /update and /resume all race their own
-      // response against the reboot they trigger).
-      log(`goto-loader response race (likely harmless): ${err.message}`);
-      setStatus(els.statusRecover, "Reboot likely requested — connection dropped as the board reset, which is expected.", "ok");
-    } finally {
-      setStatus(els.deviceRole, "rebooting\u2026");
-      pollDeviceStatusAfterReboot().catch((err) => log(`Status polling failed: ${err.message}`, "error"));
+      log(`Start ESP Bootloader failed: ${err.message}`, "error");
+      setStatus(els.statusRecover, `Start ESP Bootloader failed: ${err.message}`, "error");
+      els.btnGotoLoader.disabled = false;
     }
   });
 
   els.btnResumeApp.addEventListener("click", async () => {
     els.btnResumeApp.disabled = true;
-    setStatus(els.statusRecover, "Requesting resume of the currently-flashed app\u2026");
+    setStatus(els.statusRecover, "Opening USB and preparing to resume the user app\u2026");
     try {
-      const responseText = await resumeEsp32Ota(deviceIp);
+      const ip = await prepareForProgramming(els.statusRecover, "ota");
+      if (!ip) throw new Error("The board did not report an IP address after USB recovery.");
+      const responseText = await resumeEsp32Ota(ip);
       log(responseText);
       setStatus(els.statusRecover, "App resume requested — board is rebooting into it now.", "ok");
     } catch (err) {
-      log(`resume response race (likely harmless): ${err.message}`);
-      setStatus(els.statusRecover, "Resume likely requested — connection dropped as the board reset, which is expected.", "ok");
-    } finally {
-      setStatus(els.deviceRole, "rebooting\u2026");
-      pollDeviceStatusAfterReboot().catch((err) => log(`Status polling failed: ${err.message}`, "error"));
+      log(`Resume User App failed: ${err.message}`, "error");
+      setStatus(els.statusRecover, `Resume User App failed: ${err.message}`, "error");
+      els.btnResumeApp.disabled = false;
     }
   });
 

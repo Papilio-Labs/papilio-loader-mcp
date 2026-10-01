@@ -86,32 +86,18 @@
 
       <p class="card-note">
         Board status (over WiFi): <strong id="device-role">unknown</strong> —
-        <strong>Resume Current App</strong> reboots into whatever's already flashed (no re-upload);
-        <strong>Reboot to Loader</strong> switches to the loader so a new FPGA/ESP32 image can be
+        <strong>Resume User App</strong> reboots into whatever's already flashed (no re-upload);
+        <strong>Start ESP Bootloader</strong> switches to the loader so a new FPGA/ESP32 image can be
         flashed. If the board isn't reachable over WiFi at all, <strong>Recover via USB</strong>
         forces it back into the loader over USB — use this <em>before</em> Connect USB/Find My IP
         if the serial console is already open elsewhere on this page.
       </p>
       <div class="flash-row">
         <button id="btn-check-status" class="btn btn-outline" disabled>Check Board Status</button>
-        <button id="btn-goto-loader" class="btn btn-outline" disabled>Reboot to Loader (OTA)</button>
-        <button id="btn-resume-app" class="btn btn-outline" disabled>Resume Current App (OTA)</button>
         <button id="btn-recover-usb" class="btn btn-outline">Recover via USB</button>
       </div>
       <p class="flash-status" id="status-recover"></p>
     </section>
-
-    <details class="flash-advanced" id="loader-advanced">
-      <summary>Advanced options</summary>
-      <div class="flash-row">
-        <label for="transport-preference">FPGA transport</label>
-        <select id="transport-preference">
-          <option value="auto">Auto (OTA when available)</option>
-          <option value="ota">OTA / WiFi only</option>
-          <option value="usb">USB / Serial only</option>
-        </select>
-      </div>
-    </details>
 
     <!-- CARDS -->
     <div class="loader-cards">
@@ -154,6 +140,24 @@
       </section>
 
     </div>
+
+    <details class="status-log-section advanced-section" id="loader-advanced">
+      <summary>Advanced options</summary>
+      <div class="advanced-section-body">
+        <div class="flash-row">
+          <label for="transport-preference">FPGA transport</label>
+          <select id="transport-preference">
+            <option value="auto">Auto (OTA when available)</option>
+            <option value="ota">OTA / WiFi only</option>
+            <option value="usb">USB / Serial only</option>
+          </select>
+        </div>
+        <div class="flash-row">
+          <button id="btn-goto-loader" class="btn btn-outline">Start ESP Bootloader</button>
+          <button id="btn-resume-app" class="btn btn-outline">Resume User App</button>
+        </div>
+      </div>
+    </details>
 
     <!-- STATUS LOG -->
     <section class="status-log-section" id="loader-log-section">
