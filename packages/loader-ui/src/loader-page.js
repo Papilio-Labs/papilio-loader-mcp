@@ -17,7 +17,9 @@ import {
   watchProvisioningLine,
   flashFpgaOverSerial,
   flashEsp32OverSerial,
+  resumeAppOverSerial,
   flashFpgaOta,
+  resumeEsp32Ota,
   requestGotoLoader,
   fetchDeviceStatusText,
   createBrowserXhrPoster,
@@ -176,6 +178,20 @@ export function initLoaderPage(doc = document, win = window) {
         // It may already be closed after USB re-enumeration.
       }
     }
+  }
+
+  async function resumeAppAfterFpga(ip) {
+    if (ip) {
+      try {
+        const responseText = await resumeEsp32Ota(ip);
+        log(responseText);
+      } catch (err) {
+        log(`Resume response race (likely harmless): ${err.message}`);
+      }
+      return;
+    }
+
+    await resumeAppOverSerial(serialPort, reader);
   }
 
   async function waitForUsbReconnect(previousPort, timeoutMs = 15000) {
@@ -591,19 +607,17 @@ export function initLoaderPage(doc = document, win = window) {
       if (ip) {
         const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);
         log(responseText);
+        await resumeAppAfterFpga(ip);
         await stopSerialListener();
         awaitingReconnect = false;
-        log("FPGA write complete; USB serial port closed.", "success");
       } else {
         await flashFpgaOverSerial(serialPort, reader, "flash", new Uint8Array(body), updateFpgaProgress);
-        // FPGA flash does not reboot the ESP32. Close the serial session now
-        // that FPGA_FLASH_OK has arrived; waiting for a USB reconnect here
-        // would time out because no reconnect is expected.
+        await resumeAppAfterFpga();
         await stopSerialListener();
         awaitingReconnect = false;
-        log("FPGA write complete; USB serial port closed.", "success");
       }
 
+      log("FPGA write complete; user app resume requested.", "success");
       setStatus(els.statusFpga, "FPGA programmed successfully.", "ok");
     } catch (err) {
       log(`FPGA flash failed: ${err.message}`, "error");

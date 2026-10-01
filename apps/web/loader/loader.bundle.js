@@ -2367,6 +2367,25 @@ async function flashFpgaOverSerial(port, reader, target, data, onProgress) {
 
 // ../../packages/flasher-core/dist/app-serial.js
 var CHUNK = 16384;
+async function resumeAppOverSerial(port, reader) {
+  if (!port)
+    throw new Error("No USB serial port connected.");
+  if (!reader.isRunning)
+    await reader.start();
+  if (!port.writable)
+    throw new Error("No USB serial port connected.");
+  const writer = port.writable.getWriter();
+  try {
+    const resultPromise = reader.waitForLine(/^RESUME_OK$|^RESUME_ERROR /, 1e4);
+    await writer.write(new TextEncoder().encode("RESUME_APP\n"));
+    const resultLine = await resultPromise;
+    if (resultLine.startsWith("RESUME_ERROR")) {
+      throw new Error(`Board reported: ${resultLine}`);
+    }
+  } finally {
+    writer.releaseLock();
+  }
+}
 async function flashEsp32OverSerial(port, reader, data, onProgress) {
   if (!port)
     throw new Error("No USB serial port connected.");
@@ -2405,6 +2424,12 @@ async function flashEsp32OverSerial(port, reader, data, onProgress) {
 
 // ../../packages/flasher-core/dist/ota.js
 var OTA_PORT = 3232;
+async function resumeEsp32Ota(ip, port = OTA_PORT) {
+  const res = await fetch(`http://${ip}:${port}/resume`, { method: "POST" });
+  if (!res.ok)
+    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+  return res.text();
+}
 async function fetchDeviceStatusText(ip, port = OTA_PORT) {
   const res = await fetch(`http://${ip}:${port}/`);
   return res.text();
@@ -9704,6 +9729,18 @@ function initLoaderPage(doc = document, win = window) {
       }
     }
   }
+  async function resumeAppAfterFpga(ip) {
+    if (ip) {
+      try {
+        const responseText = await resumeEsp32Ota(ip);
+        log(responseText);
+      } catch (err2) {
+        log(`Resume response race (likely harmless): ${err2.message}`);
+      }
+      return;
+    }
+    await resumeAppOverSerial(serialPort, reader);
+  }
   async function waitForUsbReconnect(previousPort, timeoutMs = 15e3) {
     const started = Date.now();
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -10027,15 +10064,16 @@ function initLoaderPage(doc = document, win = window) {
       if (ip) {
         const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);
         log(responseText);
+        await resumeAppAfterFpga(ip);
         await stopSerialListener();
         awaitingReconnect = false;
-        log("FPGA write complete; USB serial port closed.", "success");
       } else {
         await flashFpgaOverSerial(serialPort, reader, "flash", new Uint8Array(body), updateFpgaProgress);
+        await resumeAppAfterFpga();
         await stopSerialListener();
         awaitingReconnect = false;
-        log("FPGA write complete; USB serial port closed.", "success");
       }
+      log("FPGA write complete; user app resume requested.", "success");
       setStatus(els.statusFpga, "FPGA programmed successfully.", "ok");
     } catch (err2) {
       log(`FPGA flash failed: ${err2.message}`, "error");

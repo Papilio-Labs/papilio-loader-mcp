@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { SerialLineReader } from "../src/serial-log.js";
-import { flashEsp32OverSerial } from "../src/app-serial.js";
+import { flashEsp32OverSerial, resumeAppOverSerial } from "../src/app-serial.js";
 import { MockSerialPort } from "./mock-transport.js";
 
 // Simulates the loader's APP_FLASH_BEGIN handler (serial_flash.c): first
@@ -72,6 +72,32 @@ describe("flashEsp32OverSerial", () => {
     };
 
     await expect(flashEsp32OverSerial(port, reader, new Uint8Array(10), () => {})).rejects.toThrow(/Board reported/);
+    reader.stop();
+  });
+});
+
+describe("resumeAppOverSerial", () => {
+  it("sends RESUME_APP and waits for confirmation", async () => {
+    const port = new MockSerialPort();
+    const reader = new SerialLineReader(port);
+    await reader.start();
+
+    port.onWrite = () => queueMicrotask(() => port.emit("RESUME_OK"));
+
+    await resumeAppOverSerial(port, reader);
+
+    expect(new TextDecoder().decode(port.writes[0])).toBe("RESUME_APP\n");
+    reader.stop();
+  });
+
+  it("throws when the board rejects the resume request", async () => {
+    const port = new MockSerialPort();
+    const reader = new SerialLineReader(port);
+    await reader.start();
+
+    port.onWrite = () => queueMicrotask(() => port.emit("RESUME_ERROR no_app"));
+
+    await expect(resumeAppOverSerial(port, reader)).rejects.toThrow(/Board reported/);
     reader.stop();
   });
 });

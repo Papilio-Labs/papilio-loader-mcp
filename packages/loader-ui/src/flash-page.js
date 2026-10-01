@@ -7,8 +7,10 @@ import {
   sendWifiCredentials,
   watchProvisioningLine,
   flashFpgaOverSerial,
+  resumeAppOverSerial,
   SERIAL_FPGA_TARGET,
   flashFpgaOta,
+  resumeEsp32Ota,
   createBrowserXhrPoster,
 } from "@papilio-loader/flasher-core";
 import { makeLogger, setStatus } from "./dom.js";
@@ -130,6 +132,20 @@ export function initFlashPage(doc = document) {
         // The port may already be closed after USB re-enumeration.
       }
     }
+  }
+
+  async function resumeAppAfterFpga(ip) {
+    if (ip) {
+      try {
+        const responseText = await resumeEsp32Ota(ip);
+        log(responseText);
+      } catch (err) {
+        log(`Resume response race (likely harmless): ${err.message}`);
+      }
+      return;
+    }
+
+    await resumeAppOverSerial(serialPort, reader);
   }
 
   function setDeviceIp(ip) {
@@ -343,6 +359,8 @@ export function initFlashPage(doc = document) {
           setStatus(els.statusFpga, "Uploading to board over WiFi…");
           const responseText = await flashFpgaOta(otaPoster, deviceIp, target, body, updateFpgaProgress);
           log(responseText);
+          await resumeAppAfterFpga(deviceIp);
+          await closeSerialSession();
           usedPath = "network";
         } catch (otaErr) {
           log(`WiFi OTA upload failed: ${otaErr.message}`);
@@ -358,8 +376,9 @@ export function initFlashPage(doc = document) {
         if (!serialTarget) throw new Error("This target has no USB serial equivalent yet — use WiFi OTA.");
         setStatus(els.statusFpga, "No IP known — flashing over USB serial (slower than WiFi)…");
         await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
+        await resumeAppAfterFpga();
         await closeSerialSession();
-        log("FPGA write complete; USB serial port closed.");
+        log("FPGA write complete; user app resume requested.");
         usedPath = "serial";
       }
 

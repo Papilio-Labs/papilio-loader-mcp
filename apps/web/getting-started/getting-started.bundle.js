@@ -2369,8 +2369,35 @@ async function flashFpgaOverSerial(port, reader, target, data, onProgress) {
   }
 }
 
+// ../../packages/flasher-core/dist/app-serial.js
+async function resumeAppOverSerial(port, reader) {
+  if (!port)
+    throw new Error("No USB serial port connected.");
+  if (!reader.isRunning)
+    await reader.start();
+  if (!port.writable)
+    throw new Error("No USB serial port connected.");
+  const writer = port.writable.getWriter();
+  try {
+    const resultPromise = reader.waitForLine(/^RESUME_OK$|^RESUME_ERROR /, 1e4);
+    await writer.write(new TextEncoder().encode("RESUME_APP\n"));
+    const resultLine = await resultPromise;
+    if (resultLine.startsWith("RESUME_ERROR")) {
+      throw new Error(`Board reported: ${resultLine}`);
+    }
+  } finally {
+    writer.releaseLock();
+  }
+}
+
 // ../../packages/flasher-core/dist/ota.js
 var OTA_PORT = 3232;
+async function resumeEsp32Ota(ip, port = OTA_PORT) {
+  const res = await fetch(`http://${ip}:${port}/resume`, { method: "POST" });
+  if (!res.ok)
+    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+  return res.text();
+}
 async function flashFpgaOta(poster, ip, endpoint, body, onProgress, port = OTA_PORT) {
   const url = `http://${ip}:${port}${endpoint}`;
   return poster.post(url, body, onProgress);
@@ -9515,6 +9542,18 @@ function initFlashPage(doc = document) {
       }
     }
   }
+  async function resumeAppAfterFpga(ip) {
+    if (ip) {
+      try {
+        const responseText = await resumeEsp32Ota(ip);
+        log(responseText);
+      } catch (err2) {
+        log(`Resume response race (likely harmless): ${err2.message}`);
+      }
+      return;
+    }
+    await resumeAppOverSerial(serialPort, reader);
+  }
   function setDeviceIp(ip) {
     deviceIp = ip;
     els.deviceIp.textContent = ip;
@@ -9680,6 +9719,8 @@ function initFlashPage(doc = document) {
           setStatus(els.statusFpga, "Uploading to board over WiFi\u2026");
           const responseText = await flashFpgaOta(otaPoster, deviceIp, target, body, updateFpgaProgress);
           log(responseText);
+          await resumeAppAfterFpga(deviceIp);
+          await closeSerialSession();
           usedPath = "network";
         } catch (otaErr) {
           log(`WiFi OTA upload failed: ${otaErr.message}`);
@@ -9694,8 +9735,9 @@ function initFlashPage(doc = document) {
         if (!serialTarget) throw new Error("This target has no USB serial equivalent yet \u2014 use WiFi OTA.");
         setStatus(els.statusFpga, "No IP known \u2014 flashing over USB serial (slower than WiFi)\u2026");
         await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
+        await resumeAppAfterFpga();
         await closeSerialSession();
-        log("FPGA write complete; USB serial port closed.");
+        log("FPGA write complete; user app resume requested.");
         usedPath = "serial";
       }
       setStatus(
