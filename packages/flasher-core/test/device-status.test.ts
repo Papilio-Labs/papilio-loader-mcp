@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyBootLogLine, classifyStatusResponseText, isLegacyPreMigrationApp } from "../src/device-status.js";
+import { classifyBootLogLine, classifyStatusResponseText, identifyDeviceText, isLegacyPreMigrationApp } from "../src/device-status.js";
 
 describe("classifyBootLogLine", () => {
   it("recognizes the loader's boot banner", () => {
@@ -12,6 +12,10 @@ describe("classifyBootLogLine", () => {
 
   it("recognizes FPGA-Companion's ASCII boot banner", () => {
     expect(classifyBootLogLine("           FPGA Companion for ESP32-S2/S3")).toBe("app");
+  });
+
+  it("recognizes the HDMI app's existing MCP startup marker", () => {
+    expect(classifyBootLogLine("[MCP] Debug interface ready. Type H for help.")).toBe("app");
   });
 
   it("returns null for unrelated lines", () => {
@@ -46,5 +50,38 @@ describe("isLegacyPreMigrationApp", () => {
 
   it("treats any other status as a migrated build", () => {
     expect(isLegacyPreMigrationApp(200)).toBe(false);
+  });
+});
+
+describe("identifyDeviceText", () => {
+  it("recognizes the standard Papilio app identity marker", () => {
+    expect(identifyDeviceText("PAPILIO_APP name=fpga_companion version=v1.1.1")).toEqual({
+      role: "app",
+      name: "fpga_companion",
+      version: "v1.1.1",
+    });
+  });
+
+  it("recognizes existing ESP-IDF application information", () => {
+    expect(identifyDeviceText("Project name: fpga_companion\nApp version: v1.1.1")).toEqual({
+      role: "app",
+      name: "fpga_companion",
+      version: "v1.1.1",
+    });
+  });
+
+  it("recognizes the existing FPGA Companion HTTP response", () => {
+    expect(identifyDeviceText("FPGA Companion - Network Recovery\nFirmware version  : v1.1.1")).toEqual({
+      role: "app",
+      name: "fpga_companion",
+      version: "v1.1.1",
+    });
+  });
+
+  it("identifies the existing MCP app without inventing a version", () => {
+    expect(identifyDeviceText("[MCP] Debug interface ready. Type H for help.")).toEqual({
+      role: "app",
+      name: "MCP app",
+    });
   });
 });

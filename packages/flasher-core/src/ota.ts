@@ -49,9 +49,15 @@ export async function fetchUpdateTarget(ip: string, port: number = OTA_PORT): Pr
 // GET / — both the loader and FPGA-Companion (post-Phase-6) serve a plain
 // text status/banner page here; feed the body into
 // device-status.ts#classifyStatusResponseText() to tell them apart.
-export async function fetchDeviceStatusText(ip: string, port: number = OTA_PORT): Promise<string> {
-  const res = await fetch(`http://${ip}:${port}/`);
-  return res.text();
+export async function fetchDeviceStatusText(ip: string, port: number = OTA_PORT, timeoutMs: number = 1500): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`http://${ip}:${port}/`, { signal: controller.signal });
+    return res.text();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // POST /goto-loader — only registered on post-Phase-6 FPGA-Companion

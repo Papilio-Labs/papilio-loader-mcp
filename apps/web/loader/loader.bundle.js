@@ -2424,15 +2424,25 @@ async function flashEsp32OverSerial(port, reader, data, onProgress) {
 
 // ../../packages/flasher-core/dist/ota.js
 var OTA_PORT = 3232;
+async function flashEsp32Ota(poster, ip, data, onProgress, port = OTA_PORT) {
+  const url = `http://${ip}:${port}/update`;
+  return poster.post(url, data, onProgress);
+}
 async function resumeEsp32Ota(ip, port = OTA_PORT) {
   const res = await fetch(`http://${ip}:${port}/resume`, { method: "POST" });
   if (!res.ok)
     throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
   return res.text();
 }
-async function fetchDeviceStatusText(ip, port = OTA_PORT) {
-  const res = await fetch(`http://${ip}:${port}/`);
-  return res.text();
+async function fetchDeviceStatusText(ip, port = OTA_PORT, timeoutMs = 1500) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`http://${ip}:${port}/`, { signal: controller.signal });
+    return res.text();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 async function flashFpgaOta(poster, ip, endpoint, body, onProgress, port = OTA_PORT) {
   const url = `http://${ip}:${port}${endpoint}`;
@@ -9559,10 +9569,11 @@ async function recoverIntoLoader(port, options = {}) {
 var LOADER_MARKER = "Papilio ESP Bootloader";
 var LOADER_PHASE_MARKER = "loader-phase1";
 var APP_MARKER = "FPGA Companion";
+var MCP_APP_MARKER = "[MCP] Debug interface ready";
 function classifyBootLogLine(line) {
   if (line.includes(LOADER_MARKER) || line.includes(LOADER_PHASE_MARKER))
     return "loader";
-  if (line.includes(APP_MARKER))
+  if (line.includes(APP_MARKER) || line.includes(MCP_APP_MARKER))
     return "app";
   return null;
 }
@@ -9572,6 +9583,41 @@ function classifyStatusResponseText(bodyText) {
   if (bodyText.includes(APP_MARKER))
     return "app";
   return "unknown";
+}
+function identifyDeviceText(text) {
+  const standard = text.match(/PAPILIO_APP\s+name=([^\s]+)(?:\s+version=([^\s\r\n]+))?/i);
+  if (standard) {
+    return {
+      role: "app",
+      name: standard[1],
+      version: standard[2]
+    };
+  }
+  const project = text.match(/Project name:\s*([^\r\n]+)/i);
+  const version = text.match(/(?:App version|Firmware version)\s*:\s*([^\r\n]+)/i);
+  if (project) {
+    return {
+      role: "app",
+      name: project[1].trim(),
+      version: version?.[1].trim()
+    };
+  }
+  if (text.includes(APP_MARKER) && version) {
+    return {
+      role: "app",
+      name: "fpga_companion",
+      version: version[1].trim()
+    };
+  }
+  if (text.includes(MCP_APP_MARKER)) {
+    return {
+      role: "app",
+      name: "MCP app"
+    };
+  }
+  return {
+    role: classifyStatusResponseText(text)
+  };
 }
 
 // ../../packages/flasher-core/dist/image-type.js
@@ -9618,6 +9664,8 @@ function setStatus(el, message, kind) {
 // ../../packages/loader-ui/src/loader-page.js
 function initLoaderPage(doc = document, win = window) {
   const capabilities = detectCapabilities(win);
+  const serial = win.navigator?.serial;
+  const serialFilters = [{ usbVendorId: 12346, usbProductId: 4097 }];
   const els = {
     unsupportedBanner: doc.getElementById("unsupported-banner"),
     log: doc.getElementById("loader-log"),
@@ -9625,6 +9673,7 @@ function initLoaderPage(doc = document, win = window) {
     btnCloseLog: doc.getElementById("btn-close-log"),
     btnClearLog: doc.getElementById("btn-clear-log"),
     transportPreference: doc.getElementById("transport-preference"),
+    allSerialPorts: doc.getElementById("all-serial-ports"),
     btnConnect: doc.getElementById("btn-connect"),
     btnFindIp: doc.getElementById("btn-find-ip"),
     statusConnect: doc.getElementById("status-connect"),
@@ -9665,20 +9714,46 @@ function initLoaderPage(doc = document, win = window) {
   const otaPoster = createBrowserXhrPoster();
   let serialPort = null;
   let reader = null;
+  let bootLogBuffer = "";
+  let lastKnownIdentity = { role: "unknown" };
   let deviceIp = null;
+  let deviceRole = "unknown";
   let awaitingReconnect = false;
   let fpgaImageType = null;
   let esp32ImageType = null;
   let transportPreference = els.transportPreference?.value || "auto";
   let recoveryWatch = null;
+  let statusPollGeneration = 0;
   const reconnectWaiters = /* @__PURE__ */ new Set();
-  els.btnClearLog?.addEventListener("click", () => {
+  function clearActionLog() {
     els.log.textContent = "";
+    bootLogBuffer = "";
+    lastKnownIdentity = { role: "unknown" };
+  }
+  async function requestPapilioPort() {
+    if (els.allSerialPorts?.checked) {
+      log("Showing all available USB serial ports.");
+      return serial.requestPort();
+    }
+    const grantedPorts = typeof serial?.getPorts === "function" ? await serial.getPorts() : [];
+    const matchingPorts = grantedPorts.filter((port) => {
+      const info = port.getInfo?.();
+      return info?.usbVendorId === 12346 && info?.usbProductId === 4097;
+    });
+    if (matchingPorts.length === 1) {
+      log("Using the previously authorized Papilio USB port.");
+      return matchingPorts[0];
+    }
+    return serial.requestPort({ filters: serialFilters });
+  }
+  els.btnClearLog?.addEventListener("click", () => {
+    clearActionLog();
   });
   els.btnOpenLog?.addEventListener("click", async () => {
+    clearActionLog();
     try {
       if (!serialPort) {
-        serialPort = await navigator.serial.requestPort();
+        serialPort = await requestPapilioPort();
         reader = new SerialLineReader(serialPort);
         wireReaderEvents();
         log("Serial port selected for log monitoring.");
@@ -9738,14 +9813,31 @@ function initLoaderPage(doc = document, win = window) {
   function wireReaderEvents() {
     reader.onLine((line) => {
       log(line);
+      bootLogBuffer = `${bootLogBuffer}
+${line}`.slice(-12e3);
+      const identity = identifyDeviceText(bootLogBuffer);
+      if (identity.name) {
+        lastKnownIdentity = identity;
+        deviceRole = identity.role;
+        setStatus(
+          els.deviceRole,
+          `${identity.name}${identity.version ? ` ${identity.version}` : ""}`,
+          "ok"
+        );
+      }
       watchProvisioningLine(line, {
         onIp: (ip) => setDeviceIp(ip),
         onStatus: (message, kind) => setStatus(els.statusConnect, message, kind)
       });
+      const bootRole = classifyBootLogLine(line);
+      if (bootRole) {
+        deviceRole = bootRole;
+        const label = identity.name ? `${identity.name}${identity.version ? ` ${identity.version}` : ""}` : bootRole;
+        setStatus(els.deviceRole, label, "ok");
+      }
       if (recoveryWatch) {
-        const role = classifyBootLogLine(line);
-        if (role) {
-          recoveryWatch.resolve(role);
+        if (bootRole) {
+          recoveryWatch.resolve(bootRole);
           recoveryWatch = null;
         }
       }
@@ -9836,7 +9928,7 @@ function initLoaderPage(doc = document, win = window) {
   }
   async function ensureUsbPort() {
     if (serialPort) return;
-    serialPort = await navigator.serial.requestPort();
+    serialPort = await requestPapilioPort();
     reader = new SerialLineReader(serialPort);
     wireReaderEvents();
     log("Serial port selected.");
@@ -9856,7 +9948,14 @@ function initLoaderPage(doc = document, win = window) {
     });
   }
   async function prepareForProgramming(statusElement, preference = "auto") {
+    clearActionLog();
+    statusPollGeneration++;
     await ensureUsbPort();
+    if (preference !== "usb" && deviceRole === "loader" && deviceIp) {
+      setStatus(statusElement, "Loader already running \u2014 using OTA without a reset.");
+      log(`Loader already active at ${deviceIp}; keeping the USB log open.`);
+      return deviceIp;
+    }
     await stopSerialListener();
     deviceIp = null;
     setStatus(statusElement, "Entering the loader over USB\u2026");
@@ -9875,6 +9974,7 @@ function initLoaderPage(doc = document, win = window) {
     await waitForUsbReconnect(previousPort);
     await startSerialListenerWithRetry();
     const role = await classified;
+    if (role) deviceRole = role;
     if (role && role !== "loader") {
       throw new Error("The board did not boot into the loader.");
     }
@@ -9896,8 +9996,10 @@ function initLoaderPage(doc = document, win = window) {
     els.btnCheckStatus.disabled = true;
     try {
       const bodyText = await fetchDeviceStatusText(deviceIp);
-      const role = classifyStatusResponseText(bodyText);
-      setStatus(els.deviceRole, role, role === "unknown" ? void 0 : "ok");
+      const identity = identifyDeviceText(bodyText);
+      deviceRole = identity.role;
+      const label = identity.name ? `${identity.name}${identity.version ? ` ${identity.version}` : ""}` : identity.role;
+      setStatus(els.deviceRole, label, identity.role === "unknown" ? void 0 : "ok");
       els.btnGotoLoader.disabled = false;
       els.btnResumeApp.disabled = false;
     } catch (err2) {
@@ -9909,15 +10011,19 @@ function initLoaderPage(doc = document, win = window) {
       els.btnCheckStatus.disabled = !deviceIp;
     }
   }
-  async function pollDeviceStatusAfterReboot(maxAttempts = 8, intervalMs = 2500) {
+  async function pollDeviceStatusAfterReboot(maxAttempts = 4, intervalMs = 1500) {
+    const pollGeneration = ++statusPollGeneration;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      if (pollGeneration !== statusPollGeneration) return;
       if (!deviceIp) return;
       setStatus(els.deviceRole, `rebooting\u2026 (checking ${attempt}/${maxAttempts})`);
       try {
         const bodyText = await fetchDeviceStatusText(deviceIp);
-        const role = classifyStatusResponseText(bodyText);
-        setStatus(els.deviceRole, role, role === "unknown" ? void 0 : "ok");
+        const identity = identifyDeviceText(bodyText);
+        deviceRole = identity.role;
+        const label = identity.name ? `${identity.name}${identity.version ? ` ${identity.version}` : ""}` : identity.role;
+        setStatus(els.deviceRole, label, identity.role === "unknown" ? void 0 : "ok");
         els.btnGotoLoader.disabled = false;
         els.btnResumeApp.disabled = false;
         els.btnCheckStatus.disabled = false;
@@ -9930,9 +10036,20 @@ function initLoaderPage(doc = document, win = window) {
     els.btnGotoLoader.disabled = false;
     els.btnResumeApp.disabled = false;
     els.btnCheckStatus.disabled = false;
+    if (lastKnownIdentity.name) {
+      deviceRole = lastKnownIdentity.role;
+      setStatus(
+        els.deviceRole,
+        `${lastKnownIdentity.name}${lastKnownIdentity.version ? ` ${lastKnownIdentity.version}` : ""}`,
+        "ok"
+      );
+    } else {
+      deviceRole = "app";
+      setStatus(els.deviceRole, "app (no OTA/status)");
+    }
     setStatus(
       els.statusRecover,
-      "Board didn't come back over WiFi after reboot (weak signal can take longer, or its IP may have changed). Try Check Board Status again in a bit, re-enter its IP, or use Find My IP / Recover via USB.",
+      "User app did not expose an OTA/status endpoint. It may be a USB-only app; use Start ESP Bootloader or load over USB.",
       "error"
     );
   }
@@ -9957,7 +10074,19 @@ function initLoaderPage(doc = document, win = window) {
       if (!ip) throw new Error("The board did not report an IP address after USB recovery.");
       const responseText = await resumeEsp32Ota(ip);
       log(responseText);
+      const previousPort = serialPort;
+      await stopSerialListener();
+      reader = null;
+      awaitingReconnect = true;
+      if (previousPort) {
+        waitForUsbReconnect(previousPort, 12e3).catch(
+          (err2) => log(`Post-resume USB log reconnect unavailable: ${err2.message}`)
+        );
+      }
+      deviceRole = "app";
+      setStatus(els.deviceRole, "app", "ok");
       setStatus(els.statusRecover, "App resume requested \u2014 board is rebooting into it now.", "ok");
+      pollDeviceStatusAfterReboot().catch((err2) => log(`Post-resume status check failed: ${err2.message}`, "error"));
     } catch (err2) {
       log(`Resume User App failed: ${err2.message}`, "error");
       setStatus(els.statusRecover, `Resume User App failed: ${err2.message}`, "error");
@@ -9974,10 +10103,11 @@ function initLoaderPage(doc = document, win = window) {
       return;
     }
     els.btnRecoverUsb.disabled = true;
+    clearActionLog();
     setStatus(els.statusRecover, "Recovering via USB\u2026 do not disconnect the board.");
     try {
       if (!serialPort) {
-        serialPort = await navigator.serial.requestPort();
+        serialPort = await requestPapilioPort();
         reader = new SerialLineReader(serialPort);
         wireReaderEvents();
         log("Serial port selected.");
@@ -10020,8 +10150,9 @@ function initLoaderPage(doc = document, win = window) {
     }
   });
   els.btnConnect.addEventListener("click", async () => {
+    clearActionLog();
     try {
-      serialPort = await navigator.serial.requestPort();
+      serialPort = await requestPapilioPort();
       reader = new SerialLineReader(serialPort);
       wireReaderEvents();
       log("Serial port selected.");
@@ -10040,9 +10171,10 @@ function initLoaderPage(doc = document, win = window) {
       return;
     }
     els.btnFindIp.disabled = true;
+    clearActionLog();
     try {
       if (!serialPort) {
-        serialPort = await navigator.serial.requestPort();
+        serialPort = await requestPapilioPort();
         reader = new SerialLineReader(serialPort);
         wireReaderEvents();
         log("Serial port selected.");
@@ -10069,6 +10201,7 @@ function initLoaderPage(doc = document, win = window) {
     setDeviceIp(ip);
   });
   els.btnSendWifi.addEventListener("click", async () => {
+    clearActionLog();
     const ssid = els.wifiSsid.value.trim();
     const pass = els.wifiPass.value;
     if (!ssid) {
@@ -10132,6 +10265,7 @@ function initLoaderPage(doc = document, win = window) {
       return;
     }
     els.btnFlashFpga.disabled = true;
+    clearActionLog();
     els.progressFpga.hidden = false;
     updateFpgaProgress(0, 1);
     try {
@@ -10187,6 +10321,7 @@ function initLoaderPage(doc = document, win = window) {
       return;
     }
     els.btnFlashEsp32.disabled = true;
+    clearActionLog();
     els.progressEsp32.hidden = false;
     try {
       if (isMergedEsp32Image(data)) {
@@ -10202,19 +10337,32 @@ function initLoaderPage(doc = document, win = window) {
         });
         await stopSerialListener();
         awaitingReconnect = false;
+        deviceRole = "app";
+        setStatus(els.deviceRole, "app", "ok");
         log("ESP32 write complete; USB serial port closed.", "success");
         setStatus(els.statusEsp32, "ESP32 flashed. Board rebooting automatically.", "ok");
       } else {
         setStatus(els.statusEsp32, "App image detected \u2014 entering the loader\u2026");
-        await prepareForProgramming(els.statusEsp32);
-        setStatus(els.statusEsp32, "Streaming app image into the inactive slot\u2026");
-        await flashEsp32OverSerial(serialPort, reader, data, (loaded, total) => {
-          const pct = total ? Math.round(loaded / total * 100) : 0;
-          els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
-        });
+        const ip = await prepareForProgramming(els.statusEsp32, transportPreference);
+        if (ip) {
+          setStatus(els.statusEsp32, "Streaming app image over WiFi\u2026");
+          const responseText = await flashEsp32Ota(otaPoster, ip, data, (loaded, total) => {
+            const pct = total ? Math.round(loaded / total * 100) : 0;
+            els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
+          });
+          log(responseText);
+        } else {
+          setStatus(els.statusEsp32, "Streaming app image over USB\u2026");
+          await flashEsp32OverSerial(serialPort, reader, data, (loaded, total) => {
+            const pct = total ? Math.round(loaded / total * 100) : 0;
+            els.progressEsp32.querySelector(".progress-bar").style.width = `${pct}%`;
+          });
+        }
         await stopSerialListener();
         awaitingReconnect = false;
-        log("ESP32 write complete; USB serial port closed.", "success");
+        deviceRole = "app";
+        setStatus(els.deviceRole, "app", "ok");
+        log(`ESP32 app write complete; ${ip ? "OTA" : "USB serial"} session closed.`, "success");
         setStatus(els.statusEsp32, "ESP32 app flashed into the inactive slot. Board rebooting automatically.", "ok");
       }
       els.btnSendWifi.disabled = false;

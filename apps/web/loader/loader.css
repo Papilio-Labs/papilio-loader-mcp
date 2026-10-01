@@ -8,6 +8,22 @@
   max-width: 1140px;
 }
 
+.loader-page .section-sub {
+  max-width: none;
+}
+
+.loader-page .flash-intro {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 1.5rem;
+}
+
+.loader-page .flash-intro .section-sub {
+  margin-bottom: 0;
+}
+
 /* class-based display rules below win specificity ties against the [hidden]
    UA-stylesheet rule, so force it explicitly. */
 .loader-page [hidden] {
