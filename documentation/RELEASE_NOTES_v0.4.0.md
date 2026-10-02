@@ -19,7 +19,7 @@ the published merged image over USB.
 
 ## Validation
 
-The flasher-core suite passes 35 tests, the TypeScript package compiles, and
-the web and Electron bundles build successfully. Physical USB recovery,
-interrupted-write recovery, and full A2600/C64/NES migrated-board regression
-remain hardware follow-ups.
+The flasher-core suite passes 35 tests, the TypeScript package compiles, the
+web and Electron bundles build successfully, and the Windows installer builds
+with Inno Setup 6.6.1. Physical USB recovery, interrupted-write recovery, and
+full A2600/C64/NES migrated-board regression remain hardware follow-ups.
