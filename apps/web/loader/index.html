@@ -123,6 +123,41 @@
 
     </div>
 
+    <details class="status-log-section advanced-section" id="loader-board-status" open>
+      <summary>Board Status</summary>
+      <div class="advanced-section-body">
+        <div class="flash-row board-status-controls">
+          <button id="btn-find-ip" class="btn btn-outline">Find My IP</button>
+          <button id="btn-check-status" class="btn btn-outline" disabled>Check Board Status</button>
+          <button id="btn-use-manual-ip" class="btn btn-outline">Use This IP</button>
+          <input type="text" id="device-ip-manual" placeholder="or enter IP manually, e.g. 192.168.1.42">
+        </div>
+        <div class="flash-row">
+          <span class="flash-ip-label">Mode:</span>
+          <strong id="device-role">unknown</strong>
+          <span class="flash-ip-label">IP:</span>
+          <strong id="device-ip">unknown</strong>
+        </div>
+        <p class="card-note">
+          The mode updates when the USB boot log identifies the loader or user app. Check Board Status uses the known IP when available.
+        </p>
+        <p class="flash-status" id="status-connect"></p>
+      </div>
+    </details>
+
+    <!-- STATUS LOG -->
+    <section class="status-log-section" id="loader-log-section">
+      <div class="status-log-header">
+        <h2>Status Log</h2>
+        <div class="flash-row log-controls">
+          <button id="btn-open-log" class="btn btn-outline">Open Log</button>
+          <button id="btn-close-log" class="btn btn-outline">Close Log</button>
+          <button id="btn-clear-log" class="btn btn-outline">Clear Log</button>
+        </div>
+      </div>
+      <div id="loader-log" class="status-log" aria-live="polite"></div>
+    </section>
+
     <details class="status-log-section advanced-section" id="loader-advanced">
       <summary>Advanced options</summary>
       <div class="advanced-section-body">
@@ -144,43 +179,6 @@
           <button id="btn-goto-loader" class="btn btn-outline">Start ESP Bootloader</button>
           <button id="btn-resume-app" class="btn btn-outline">Resume User App</button>
         </div>
-      </div>
-    </details>
-
-    <!-- STATUS LOG -->
-    <section class="status-log-section" id="loader-log-section">
-      <div class="status-log-header">
-        <h2>Status Log</h2>
-        <div class="flash-row log-controls">
-          <button id="btn-open-log" class="btn btn-outline">Open Log</button>
-          <button id="btn-close-log" class="btn btn-outline">Close Log</button>
-          <button id="btn-clear-log" class="btn btn-outline">Clear Log</button>
-        </div>
-      </div>
-      <div id="loader-log" class="status-log" aria-live="polite"></div>
-    </section>
-
-    <details class="status-log-section advanced-section" id="loader-board-status">
-      <summary>Board Status</summary>
-      <div class="advanced-section-body">
-        <div class="flash-row">
-          <span class="flash-ip-label">Mode:</span>
-          <strong id="device-role">unknown</strong>
-          <span class="flash-ip-label">IP:</span>
-          <strong id="device-ip">unknown</strong>
-        </div>
-        <div class="flash-row">
-          <input type="text" id="device-ip-manual" placeholder="or enter IP manually, e.g. 192.168.1.42">
-          <button id="btn-use-manual-ip" class="btn btn-outline">Use This IP</button>
-          <button id="btn-check-status" class="btn btn-outline" disabled>Check Board Status</button>
-        </div>
-        <p class="card-note">
-          The mode updates when the USB boot log identifies the loader or user app. Check Board Status uses the known IP when available.
-        </p>
-        <div class="flash-row">
-          <button id="btn-find-ip" class="btn btn-outline">Find My IP</button>
-        </div>
-        <p class="flash-status" id="status-connect"></p>
       </div>
     </details>
 

@@ -2444,6 +2444,19 @@ async function fetchDeviceStatusText(ip, port = OTA_PORT, timeoutMs = 1500) {
     clearTimeout(timeout);
   }
 }
+async function requestGotoLoader(ip, port = OTA_PORT, timeoutMs = 2e3) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`http://${ip}:${port}/goto-loader`, {
+      method: "POST",
+      signal: controller.signal
+    });
+    return res.status;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 async function flashFpgaOta(poster, ip, endpoint, body, onProgress, port = OTA_PORT) {
   const url = `http://${ip}:${port}${endpoint}`;
   return poster.post(url, body, onProgress);
@@ -9708,7 +9721,7 @@ function initLoaderPage(doc = document, win = window) {
     appVersion: doc.getElementById("app-version")
   };
   if (els.appVersion) {
-    els.appVersion.textContent = `v${true ? "0.1.1" : "dev"}`;
+    els.appVersion.textContent = `v${true ? "0.4.0" : "dev"}`;
   }
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
@@ -9722,6 +9735,7 @@ function initLoaderPage(doc = document, win = window) {
   let fpgaImageType = null;
   let esp32ImageType = null;
   let transportPreference = els.transportPreference?.value || "auto";
+  let lastStatusCheckAt = 0;
   let recoveryWatch = null;
   let statusPollGeneration = 0;
   const reconnectWaiters = /* @__PURE__ */ new Set();
@@ -9947,15 +9961,79 @@ ${line}`.slice(-12e3);
       poll();
     });
   }
+  async function waitForLoaderOverOta(ip, timeoutMs = 15e3) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      try {
+        const bodyText = await fetchDeviceStatusText(ip);
+        const identity = identifyDeviceText(bodyText);
+        if (identity.role === "loader") return ip;
+      } catch {
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error("Timed out waiting for the bootloader to return over WiFi.");
+  }
   async function prepareForProgramming(statusElement, preference = "auto") {
     clearActionLog();
     statusPollGeneration++;
-    await ensureUsbPort();
+    if (!deviceIp && preference !== "usb") {
+      const manualIp = els.deviceIpManual?.value.trim();
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(manualIp)) setDeviceIp(manualIp);
+    }
+    if (preference === "ota" && !deviceIp) {
+      throw new Error("OTA / WiFi requires a board IP address. Enter one in Board Status first.");
+    }
+    if (preference !== "usb" && deviceIp && Date.now() - lastStatusCheckAt > 5e3) {
+      try {
+        const bodyText = await fetchDeviceStatusText(deviceIp, void 0, 3e3);
+        deviceRole = identifyDeviceText(bodyText).role;
+        lastStatusCheckAt = Date.now();
+      } catch (err2) {
+        if (preference === "ota") {
+          throw new Error(`Unable to check the board over WiFi: ${err2.message}`);
+        }
+        deviceRole = "unknown";
+        log(`Board status check unavailable; continuing with automatic recovery: ${err2.message}`);
+      }
+    }
+    if (preference === "ota") {
+      if (deviceRole === "loader") {
+        setStatus(statusElement, "Loader already running \u2014 using OTA.");
+        return deviceIp;
+      }
+      const appIp = deviceIp;
+      setStatus(statusElement, "Switching to the loader over WiFi\u2026");
+      await requestGotoLoader(appIp);
+      log(`Loader handoff requested at ${appIp}; waiting over WiFi.`);
+      await waitForLoaderOverOta(appIp);
+      deviceRole = "loader";
+      setStatus(statusElement, "Loader ready \u2014 using OTA.", "ok");
+      return appIp;
+    }
+    if (preference !== "usb" && deviceRole !== "loader" && deviceIp) {
+      const appIp = deviceIp;
+      setStatus(statusElement, "Switching to the loader over WiFi\u2026");
+      try {
+        const responseText = await requestGotoLoader(appIp);
+        log(responseText);
+        setStatus(statusElement, "Waiting for the loader over WiFi\u2026");
+        await waitForLoaderOverOta(appIp);
+        deviceRole = "loader";
+        setStatus(statusElement, "Loader ready \u2014 using OTA.", "ok");
+        log(`Loader found at ${appIp}; using OTA without USB.`);
+        return appIp;
+      } catch (err2) {
+        if (preference === "ota") throw err2;
+        log(`Network handoff unavailable; falling back to USB: ${err2.message}`);
+      }
+    }
     if (preference !== "usb" && deviceRole === "loader" && deviceIp) {
       setStatus(statusElement, "Loader already running \u2014 using OTA without a reset.");
-      log(`Loader already active at ${deviceIp}; keeping the USB log open.`);
+      log(`Loader already active at ${deviceIp}; using OTA without opening USB.`);
       return deviceIp;
     }
+    await ensureUsbPort();
     await stopSerialListener();
     deviceIp = null;
     setStatus(statusElement, "Entering the loader over USB\u2026");
@@ -9998,11 +10076,14 @@ ${line}`.slice(-12e3);
       const bodyText = await fetchDeviceStatusText(deviceIp);
       const identity = identifyDeviceText(bodyText);
       deviceRole = identity.role;
+      lastStatusCheckAt = Date.now();
       const label = identity.name ? `${identity.name}${identity.version ? ` ${identity.version}` : ""}` : identity.role;
       setStatus(els.deviceRole, label, identity.role === "unknown" ? void 0 : "ok");
       els.btnGotoLoader.disabled = false;
       els.btnResumeApp.disabled = false;
     } catch (err2) {
+      deviceRole = "unknown";
+      lastStatusCheckAt = 0;
       setStatus(els.deviceRole, "unreachable", "error");
       els.btnGotoLoader.disabled = false;
       els.btnResumeApp.disabled = false;

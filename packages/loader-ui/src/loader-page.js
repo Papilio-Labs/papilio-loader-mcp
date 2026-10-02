@@ -21,6 +21,7 @@ import {
   flashFpgaOta,
   flashEsp32Ota,
   resumeEsp32Ota,
+  requestGotoLoader,
   fetchDeviceStatusText,
   createBrowserXhrPoster,
   detectCapabilities,
@@ -101,6 +102,7 @@ export function initLoaderPage(doc = document, win = window) {
   let fpgaImageType = null;
   let esp32ImageType = null;
   let transportPreference = els.transportPreference?.value || "auto";
+  let lastStatusCheckAt = 0;
   let recoveryWatch = null; // { resolve } while a Recover-via-USB boot-log classification is armed
   let statusPollGeneration = 0;
   const reconnectWaiters = new Set();
@@ -363,19 +365,94 @@ export function initLoaderPage(doc = document, win = window) {
     });
   }
 
+  async function waitForLoaderOverOta(ip, timeoutMs = 15000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      try {
+        const bodyText = await fetchDeviceStatusText(ip);
+        const identity = identifyDeviceText(bodyText);
+        if (identity.role === "loader") return ip;
+      } catch {
+        // The app's HTTP server is expected to disappear during the reboot.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error("Timed out waiting for the bootloader to return over WiFi.");
+  }
+
   async function prepareForProgramming(statusElement, preference = "auto") {
     clearActionLog();
     statusPollGeneration++;
+
+    if (!deviceIp && preference !== "usb") {
+      const manualIp = els.deviceIpManual?.value.trim();
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(manualIp)) setDeviceIp(manualIp);
+    }
+
+    if (preference === "ota" && !deviceIp) {
+      throw new Error("OTA / WiFi requires a board IP address. Enter one in Board Status first.");
+    }
+
+    if (preference !== "usb" && deviceIp && Date.now() - lastStatusCheckAt > 5000) {
+      try {
+        const bodyText = await fetchDeviceStatusText(deviceIp, undefined, 3000);
+        deviceRole = identifyDeviceText(bodyText).role;
+        lastStatusCheckAt = Date.now();
+      } catch (err) {
+        if (preference === "ota") {
+          throw new Error(`Unable to check the board over WiFi: ${err.message}`);
+        }
+        deviceRole = "unknown";
+        log(`Board status check unavailable; continuing with automatic recovery: ${err.message}`);
+      }
+    }
+
+    if (preference === "ota") {
+      if (deviceRole === "loader") {
+        setStatus(statusElement, "Loader already running — using OTA.");
+        return deviceIp;
+      }
+
+      const appIp = deviceIp;
+      setStatus(statusElement, "Switching to the loader over WiFi…");
+      await requestGotoLoader(appIp);
+      log(`Loader handoff requested at ${appIp}; waiting over WiFi.`);
+      await waitForLoaderOverOta(appIp);
+      deviceRole = "loader";
+      setStatus(statusElement, "Loader ready — using OTA.", "ok");
+      return appIp;
+    }
+
+    // An app with the network recovery endpoint can hand off to the loader
+    // without opening USB. Keep the existing USB path as the fallback.
+    if (preference !== "usb" && deviceRole !== "loader" && deviceIp) {
+      const appIp = deviceIp;
+      setStatus(statusElement, "Switching to the loader over WiFi…");
+      try {
+        const responseText = await requestGotoLoader(appIp);
+        log(responseText);
+        setStatus(statusElement, "Waiting for the loader over WiFi…");
+        await waitForLoaderOverOta(appIp);
+        deviceRole = "loader";
+        setStatus(statusElement, "Loader ready — using OTA.", "ok");
+        log(`Loader found at ${appIp}; using OTA without USB.`);
+        return appIp;
+      } catch (err) {
+        if (preference === "ota") throw err;
+        log(`Network handoff unavailable; falling back to USB: ${err.message}`);
+      }
+    }
+
+    if (preference !== "usb" && deviceRole === "loader" && deviceIp) {
+      setStatus(statusElement, "Loader already running — using OTA without a reset.");
+      log(`Loader already active at ${deviceIp}; using OTA without opening USB.`);
+      return deviceIp;
+    }
+
     await ensureUsbPort();
 
     // The advanced bootloader action can leave the loader running with its
     // serial log open. Reuse that state instead of resetting the board again.
-    if (preference !== "usb" && deviceRole === "loader" && deviceIp) {
-      setStatus(statusElement, "Loader already running — using OTA without a reset.");
-      log(`Loader already active at ${deviceIp}; keeping the USB log open.`);
-      return deviceIp;
-    }
-
     await stopSerialListener();
 
     deviceIp = null;
@@ -427,6 +504,7 @@ export function initLoaderPage(doc = document, win = window) {
       const bodyText = await fetchDeviceStatusText(deviceIp);
       const identity = identifyDeviceText(bodyText);
       deviceRole = identity.role;
+      lastStatusCheckAt = Date.now();
       const label = identity.name
         ? `${identity.name}${identity.version ? ` ${identity.version}` : ""}`
         : identity.role;
@@ -434,6 +512,8 @@ export function initLoaderPage(doc = document, win = window) {
       els.btnGotoLoader.disabled = false;
       els.btnResumeApp.disabled = false;
     } catch (err) {
+      deviceRole = "unknown";
+      lastStatusCheckAt = 0;
       setStatus(els.deviceRole, "unreachable", "error");
       els.btnGotoLoader.disabled = false;
       els.btnResumeApp.disabled = false;

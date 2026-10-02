@@ -159,6 +159,28 @@
   padding-top: 0.25rem;
 }
 
+.board-status-controls {
+  flex-wrap: nowrap;
+}
+
+.board-status-controls .btn {
+  flex: 0 0 auto;
+}
+
+.board-status-controls input[type="text"] {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .board-status-controls {
+    flex-wrap: wrap;
+  }
+
+  .board-status-controls input[type="text"] {
+    flex-basis: 100%;
+  }
+}
+
 .status-log-header {
   display: flex;
   align-items: center;

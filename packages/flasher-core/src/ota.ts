@@ -64,9 +64,18 @@ export async function fetchDeviceStatusText(ip: string, port: number = OTA_PORT,
 // builds; returns the raw HTTP status so callers can feed it into
 // device-status.ts#isLegacyPreMigrationApp() (404 => pre-Phase-6 build that
 // never had this route).
-export async function requestGotoLoader(ip: string, port: number = OTA_PORT): Promise<number> {
-  const res = await fetch(`http://${ip}:${port}/goto-loader`, { method: "POST" });
-  return res.status;
+export async function requestGotoLoader(ip: string, port: number = OTA_PORT, timeoutMs: number = 2000): Promise<number> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`http://${ip}:${port}/goto-loader`, {
+      method: "POST",
+      signal: controller.signal,
+    });
+    return res.status;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // FPGA OTA targets supported by the Phase 7 loader. SPI Flash is the default

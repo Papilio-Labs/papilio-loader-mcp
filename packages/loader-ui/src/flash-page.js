@@ -165,6 +165,19 @@ export function initFlashPage(doc = document) {
     await reader.start();
   }
 
+  async function startSerialListenerWithRetry(maxAttempts = 3, delayMs = 750) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await startSerialListener();
+        return;
+      } catch (err) {
+        if (attempt === maxAttempts) throw err;
+        log(`USB serial port not ready (attempt ${attempt}/${maxAttempts}), retrying...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
   async function closeSerialSession() {
     if (reader?.isRunning) await reader.stop();
     if (serialPort?.close) {
@@ -287,6 +300,7 @@ export function initFlashPage(doc = document) {
         data = new Uint8Array(await resp.arrayBuffer());
         setStatus(els.statusEsp32, "Connecting to ESP32…");
       }
+      await startSerialListenerWithRetry();
       await flashEsp32(serialPort, data, {
         onLog: log,
         onProgress: (written, total) => {
@@ -433,6 +447,7 @@ export function initFlashPage(doc = document) {
         const serialTarget = SERIAL_FPGA_TARGET[target];
         if (!serialTarget) throw new Error("This target has no USB serial equivalent yet — use WiFi OTA.");
         setStatus(els.statusFpga, "No IP known — flashing over USB serial (slower than WiFi)…");
+        await startSerialListenerWithRetry();
         await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
         await resumeAppAfterFpga();
         await closeSerialSession();
