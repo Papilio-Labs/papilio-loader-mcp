@@ -102,6 +102,7 @@ export function initFlashPage(doc = document) {
   // flash the latest official release with no manual download — falls back
   // to the file picker below if the manifest can't be fetched.
   let bundledFirmware = null; // { version, fileName } once fetched
+  const assetVersion = typeof __LOADER_VERSION__ !== "undefined" ? __LOADER_VERSION__ : "dev";
 
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
@@ -112,7 +113,7 @@ export function initFlashPage(doc = document) {
   }
 
   if (els.esp32BundledVersion) {
-    fetch("firmware/manifest.json")
+    fetch(`firmware/manifest.json?v=${encodeURIComponent(assetVersion)}`)
       .then((resp) => {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return resp.json();
@@ -295,7 +296,9 @@ export function initFlashPage(doc = document) {
           return;
         }
       } else {
-        const resp = await fetch(`firmware/${bundledFirmware.fileName}`);
+        const resp = await fetch(
+          `firmware/${bundledFirmware.fileName}?v=${encodeURIComponent(assetVersion)}`
+        );
         if (!resp.ok) throw new Error(`Firmware download failed (HTTP ${resp.status})`);
         data = new Uint8Array(await resp.arrayBuffer());
         setStatus(els.statusEsp32, "Connecting to ESP32…");

@@ -9539,6 +9539,7 @@ function initFlashPage(doc = document) {
   let deviceIp = null;
   let awaitingReconnect = false;
   let bundledFirmware = null;
+  const assetVersion = true ? "0.4.0" : "dev";
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
     [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFindIp, els.btnOpenLog, els.btnCloseLog].forEach(
@@ -9547,7 +9548,7 @@ function initFlashPage(doc = document) {
     return;
   }
   if (els.esp32BundledVersion) {
-    fetch("firmware/manifest.json").then((resp) => {
+    fetch(`firmware/manifest.json?v=${encodeURIComponent(assetVersion)}`).then((resp) => {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return resp.json();
     }).then((manifest) => {
@@ -9692,7 +9693,9 @@ function initFlashPage(doc = document) {
           return;
         }
       } else {
-        const resp = await fetch(`firmware/${bundledFirmware.fileName}`);
+        const resp = await fetch(
+          `firmware/${bundledFirmware.fileName}?v=${encodeURIComponent(assetVersion)}`
+        );
         if (!resp.ok) throw new Error(`Firmware download failed (HTTP ${resp.status})`);
         data = new Uint8Array(await resp.arrayBuffer());
         setStatus(els.statusEsp32, "Connecting to ESP32\u2026");
