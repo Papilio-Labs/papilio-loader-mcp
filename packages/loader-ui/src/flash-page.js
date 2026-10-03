@@ -341,7 +341,7 @@ export function initFlashPage(doc = document) {
     }
 
     try {
-      await startSerialListener();
+      await startSerialListenerWithRetry(8, 500);
       await sendWifiCredentials(serialPort, ssid, pass);
       setStatus(els.statusWifi, "Credentials sent, waiting for board to confirm…");
     } catch (err) {
