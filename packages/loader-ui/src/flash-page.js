@@ -303,7 +303,10 @@ export function initFlashPage(doc = document) {
         data = new Uint8Array(await resp.arrayBuffer());
         setStatus(els.statusEsp32, "Connecting to ESP32…");
       }
-      await startSerialListenerWithRetry();
+      // esptool-js must own the Web Serial port exclusively while flashing.
+      // A log reader left open here causes the browser's "port is already open"
+      // error before esptool can enter the ROM bootloader.
+      await closeSerialSession();
       await flashEsp32(serialPort, data, {
         onLog: log,
         onProgress: (written, total) => {

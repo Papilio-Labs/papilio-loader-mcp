@@ -9700,7 +9700,7 @@ function initFlashPage(doc = document) {
         data = new Uint8Array(await resp.arrayBuffer());
         setStatus(els.statusEsp32, "Connecting to ESP32\u2026");
       }
-      await startSerialListenerWithRetry();
+      await closeSerialSession();
       await flashEsp32(serialPort, data, {
         onLog: log,
         onProgress: (written, total) => {
