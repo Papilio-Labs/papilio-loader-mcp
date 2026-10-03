@@ -1,7 +1,7 @@
 # Papilio Loader v0.4.0
 
-This release completes the Phase-8 loader workflow for boards using the
-Papilio ESP Bootloader and stripped FPGA Companion.
+This release completes the loader workflow for boards using the
+factory-resident Papilio ESP Bootloader and the stripped FPGA Companion.
 
 ## Highlights
 
@@ -10,12 +10,15 @@ Papilio ESP Bootloader and stripped FPGA Companion.
 - Failed or aborted status probes invalidate stale cached device roles.
 - Web and Electron builds share the same updated loader state machine.
 - Desktop startup includes the WiFi log display path.
+- OTA programming is available through the bootloader regardless of which
+	user application is installed.
 
 ## Compatibility
 
 Use `FPGA-Companion v2.0.0` only with `papilio-esp-bootloader v0.1.0` or a
-compatible Phase-6 bootloader. Pre-Phase-6 boards must be migrated once with
-the published merged image over USB.
+compatible factory-resident bootloader. Boards using the previous
+application-centered OTA design must be migrated once with the published
+merged image over USB.
 
 ## Validation
 
