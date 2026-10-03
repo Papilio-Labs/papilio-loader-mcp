@@ -7,7 +7,7 @@ Quick reference guide for building the desktop application.
 - Python 3.12 or later
 - Git
 - Windows (for full build)
-- (Optional) Inno Setup 6 for creating installers
+- Node.js and npm for building the web UI and Electron installer
 
 ## Quick Build
 
@@ -31,6 +31,7 @@ Output:
 - `dist/pesptool.exe` - Standalone FPGA flashing tool
 - `dist/esptool.exe` - Standalone ESP32 flashing tool
 - `installer_output/PapilioLoader-Setup-x.x.x.exe` - Windows installer
+- `apps/desktop/release/Papilio Loader Setup x.x.x.exe` - Electron Builder output
 
 ### Build Executable Only
 
@@ -83,16 +84,15 @@ Standalone tools:
 
 ### 3. Create Windows Installer (Optional)
 
-Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then:
+The installer is built with Electron Builder and packages the current web UI.
+Run the release build from the repository root:
 
-```bash
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+```powershell
+.\build.ps1 -InstallerOnly
 ```
 
-Installer includes:
-- `PapilioLoader.exe` and `PapilioLoader-Console.exe`
-- `pesptool.exe` and `esptool.exe`
-- Optional PATH integration to use tools from any command prompt
+The canonical installer is copied to `installer_output/`. The legacy
+`installer.iss` Inno Setup script is not used for current releases.
 
 ## Build Options
 
@@ -212,18 +212,15 @@ Also verify standalone tools:
 
 ### Version Information
 
-Update in multiple places:
-- `pyproject.toml` - version field
-- `installer.iss` - `#define MyAppVersion`
-- Optionally create a version resource file for the executable
+Update the workspace package versions consistently in `package.json`,
+`apps/web/package.json`, and `apps/desktop/package.json`.
 
 Note: Update both GUI and tool versions consistently.
 
 ### Application Name
 
 Update in:
-- `installer.iss` - `#define MyAppName`
-- `papilio_loader.spec` - `name` parameter
+- `apps/desktop/electron-builder.yml` - `productName`
 
 ## Distribution
 
@@ -283,8 +280,7 @@ Example GitHub Actions workflow:
 ## Release Checklist
 
 1. Verify version numbers
-  - Confirm [pyproject.toml](../pyproject.toml) `version` matches release (e.g., 0.1.0)
-  - Confirm [installer.iss](../installer.iss) `MyAppVersion` matches
+  - Confirm the root and desktop package versions match the release
 2. Merge to main
   - Merge `packaging` branch into `main`
 3. Build artifacts on main

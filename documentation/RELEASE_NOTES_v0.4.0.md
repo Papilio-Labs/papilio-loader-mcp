@@ -24,5 +24,6 @@ merged image over USB.
 
 The flasher-core suite passes 35 tests, the TypeScript package compiles, the
 web and Electron bundles build successfully, and the Windows installer builds
-with Inno Setup 6.6.1. Physical USB recovery, interrupted-write recovery, and
-full A2600/C64/NES migrated-board regression remain hardware follow-ups.
+with Electron Builder 26.15.3. Physical USB recovery, interrupted-write
+recovery, and full A2600/C64/NES migrated-board regression remain hardware
+follow-ups.

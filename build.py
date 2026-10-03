@@ -8,17 +8,18 @@ This script:
 import subprocess
 import sys
 import shutil
+import json
 from pathlib import Path
 
 
-def run_command(cmd, description):
+def run_command(cmd, description, cwd=None):
     """Run a command and handle errors."""
     print(f"\n{'=' * 60}")
     print(f"{description}")
     print(f"{'=' * 60}")
     print(f"Running: {' '.join(cmd)}\n")
     
-    result = subprocess.run(cmd, shell=True)
+    result = subprocess.run(cmd, cwd=cwd)
     
     if result.returncode != 0:
         print(f"\n❌ Error: {description} failed with code {result.returncode}")
@@ -102,34 +103,58 @@ def build_executable():
 
 
 def build_installer():
-    """Build the Windows installer using Inno Setup."""
-    # Check if Inno Setup is installed
-    inno_paths = [
-        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-        r"C:\Program Files\Inno Setup 6\ISCC.exe",
+    """Build the current Electron/NSIS Windows installer."""
+    node_candidates = [
+        shutil.which("node"),
+        r"C:\Program Files\nodejs\node.exe",
+        r"C:\Program Files (x86)\nodejs\node.exe",
     ]
-    
-    iscc_exe = None
-    for path in inno_paths:
-        if Path(path).exists():
-            iscc_exe = path
-            break
-    
-    if not iscc_exe:
-        print("\n⚠️  Warning: Inno Setup not found")
-        print("   Download from: https://jrsoftware.org/isinfo.php")
-        print("   Skipping installer creation")
+    node_exe = next((path for path in node_candidates if path and Path(path).exists()), None)
+    if not node_exe:
+        print("\n⚠️  Warning: Node.js not found")
+        print("   Install Node.js to build the Electron installer")
         return False
     
-    if not Path('installer.iss').exists():
-        print("❌ Error: installer.iss not found")
+    web_dir = Path("apps/web")
+    desktop_dir = Path("apps/desktop")
+    builder_cli = Path("node_modules/electron-builder/out/cli/cli.js")
+    if not web_dir.exists() or not desktop_dir.exists() or not builder_cli.exists():
+        print("❌ Error: Electron workspace or electron-builder is missing")
         return False
-    
-    # Run Inno Setup compiler
-    return run_command(
-        [iscc_exe, "installer.iss"],
-        "Building Windows installer with Inno Setup"
-    )
+
+    if not run_command(
+        [node_exe, "build.mjs"],
+        "Building the web bundle for the Electron installer",
+        cwd=web_dir,
+    ):
+        return False
+
+    if not run_command(
+        [node_exe, "build.mjs"],
+        "Building the Electron desktop application",
+        cwd=desktop_dir,
+    ):
+        return False
+
+    release_dir = desktop_dir / "release"
+    for stale_dir in (release_dir / "win-unpacked", release_dir / "win-unpacked.tmp"):
+        if stale_dir.exists():
+            shutil.rmtree(stale_dir)
+
+    if not run_command(
+        [node_exe, str(Path("..") / ".." / builder_cli), "--win", "nsis"],
+        "Building the Windows installer with Electron Builder",
+        cwd=desktop_dir,
+    ):
+        return False
+
+    version = json.loads((desktop_dir / "package.json").read_text(encoding="utf-8"))["version"]
+    built_installer = release_dir / f"Papilio Loader Setup {version}.exe"
+    published_installer = Path("installer_output") / f"PapilioLoader-Setup-{version}.exe"
+    published_installer.parent.mkdir(exist_ok=True)
+    shutil.copy2(built_installer, published_installer)
+    print(f"✅ Current Electron installer copied to {published_installer.absolute()}")
+    return True
 
 
 def main():

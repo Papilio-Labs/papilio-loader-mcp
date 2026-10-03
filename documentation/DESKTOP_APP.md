@@ -154,7 +154,7 @@ Or create a `.env` file in the application directory.
 
 - Python 3.12 or later
 - Git
-- (Optional) Inno Setup 6 for creating Windows installer
+- Node.js and npm for building the Electron installer
 
 ### Build Steps
 
@@ -206,14 +206,15 @@ pyinstaller papilio_loader.spec --clean
 
 ### Creating the Installer
 
-After building the executable:
+The current installer is built with Electron Builder and includes the same
+web UI used by the public Loader site. From the repository root, run:
 
-1. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php)
-2. Open `installer.iss` in Inno Setup
-3. Click "Compile" or run:
-   ```powershell
-   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
-   ```
+```powershell
+.\build.ps1 -InstallerOnly
+```
+
+The installer is copied to `installer_output/`. The legacy Inno Setup script
+is not used for current releases.
 
 ## Troubleshooting
 
@@ -344,7 +345,7 @@ See the main repository for license information.
 ### Version 0.1.0
 - Initial desktop application release
 - System tray integration with pystray
-- Windows installer with Inno Setup
+- Windows installer with Electron Builder
 - User data directory management for Windows installations
 - Auto-start capability
 - Single-file executable option
