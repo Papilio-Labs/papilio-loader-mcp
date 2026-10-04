@@ -12,6 +12,10 @@ import {
   flashFpgaOta,
   uploadRomOta,
   resumeEsp32Ota,
+  requestGotoLoader,
+  fetchDeviceStatusText,
+  identifyDeviceText,
+  recoverIntoLoader,
   createBrowserXhrPoster,
   detectBinaryImageType,
 } from "@papilio-loader/flasher-core";
@@ -58,6 +62,8 @@ export function initFlashPage(doc = document) {
   };
 
   if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
@@ -112,6 +118,38 @@ export function initFlashPage(doc = document) {
   let bundledA2600Rom = null;
   const assetVersion = typeof __LOADER_VERSION__ !== "undefined" ? __LOADER_VERSION__ : "dev";
 
+  // Replace the static fallback links in Step 1 with the exact releases the
+  // bundled recovery image was built from.
+  function renderFirmwareSources(manifest) {
+    const el = doc.getElementById("esp32-sources");
+    const components = manifest.components;
+    if (!el || !components) return;
+    el.replaceChildren();
+    el.append("Contains ");
+    [components.bootloader, components.companion].forEach((c, i) => {
+      if (i) el.append(" + ");
+      const release = doc.createElement("a");
+      release.href = c.releaseUrl;
+      release.target = "_blank";
+      release.rel = "noopener";
+      release.textContent = `${c.name} ${c.release}`;
+      const source = doc.createElement("a");
+      source.href = c.repoUrl;
+      source.target = "_blank";
+      source.rel = "noopener";
+      source.textContent = "source";
+      el.append(release, " (", source, ")");
+    });
+    if (manifest.releaseUrl) {
+      const image = doc.createElement("a");
+      image.href = manifest.releaseUrl;
+      image.target = "_blank";
+      image.rel = "noopener";
+      image.textContent = manifest.fileName;
+      el.append(". Image: ", image, ".");
+    }
+  }
+
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
     [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFlashA2600, els.btnLoadRom, els.btnFindIp, els.btnOpenLog, els.btnCloseLog].forEach(
@@ -131,6 +169,7 @@ export function initFlashPage(doc = document) {
         bundledA2600Core = manifest.artifacts?.a2600Core || null;
         bundledA2600Rom = manifest.artifacts?.a2600Rom || null;
         els.esp32BundledVersion.textContent = manifest.version;
+        renderFirmwareSources(manifest);
         updateFlashEsp32Enabled();
         updateA2600Enabled();
       })
@@ -251,6 +290,91 @@ export function initFlashPage(doc = document) {
     }
 
     await resumeAppOverSerial(serialPort, reader);
+  }
+
+  async function probeRole(ip, timeoutMs = 2000) {
+    try {
+      return identifyDeviceText(await fetchDeviceStatusText(ip, undefined, timeoutMs)).role;
+    } catch {
+      return null;
+    }
+  }
+
+  async function waitForRoleOverWifi(ip, role, timeoutMs = 20000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if ((await probeRole(ip)) === role) return true;
+      await sleep(500);
+    }
+    return false;
+  }
+
+  async function waitForUsbPort(previousPort, timeoutMs = 15000) {
+    const started = Date.now();
+    await sleep(500);
+    while (Date.now() - started < timeoutMs) {
+      if (serialPort && serialPort !== previousPort && !awaitingReconnect) return;
+      if (await reacquireGrantedPort().catch(() => false)) {
+        awaitingReconnect = false;
+        return;
+      }
+      if (previousPort?.connected !== false) {
+        try {
+          await startSerialListener();
+          awaitingReconnect = false;
+          return;
+        } catch {
+          // Port is still re-enumerating.
+        }
+      }
+      await sleep(500);
+    }
+    throw new Error("Timed out waiting for the board's USB port to come back.");
+  }
+
+  // FPGA-Companion v2+ no longer serves the flashing endpoints — only the
+  // Papilio ESP Bootloader (factory partition) does. Hand off to the loader
+  // first: over WiFi via the app's POST /goto-loader, otherwise over USB by
+  // blanking otadata. Returns the IP to use for OTA, or null for USB serial.
+  async function enterLoader(statusEl, preference = "auto") {
+    if (preference !== "usb" && deviceIp) {
+      const role = await probeRole(deviceIp, 3000);
+      if (role === "loader") return deviceIp;
+      try {
+        setStatus(statusEl, "Switching the board to the Papilio ESP Bootloader over WiFi…");
+        try {
+          log(`goto-loader → HTTP ${await requestGotoLoader(deviceIp)}`);
+        } catch (err) {
+          // The app may reboot before its reply arrives.
+          log(`goto-loader reply not received (${err.message}); waiting for the bootloader anyway.`);
+        }
+        if (await waitForRoleOverWifi(deviceIp, "loader")) {
+          log(`Bootloader ready at ${deviceIp}.`);
+          return deviceIp;
+        }
+        throw new Error("the bootloader did not come back over WiFi");
+      } catch (err) {
+        if (preference === "ota" || !serialPort) {
+          throw new Error(`Could not switch to the bootloader over WiFi (${err.message}).`);
+        }
+        log(`WiFi handoff failed (${err.message}); falling back to USB.`);
+      }
+    }
+
+    if (preference === "ota") throw new Error("OTA / WiFi was selected, but the device IP is not available.");
+    if (!serialPort) throw new Error("Connect USB (Step 1) or set the board IP (Step 2) first.");
+
+    setStatus(statusEl, "Switching the board to the Papilio ESP Bootloader over USB…");
+    await closeSerialSession();
+    const previousPort = serialPort;
+    awaitingReconnect = true;
+    await recoverIntoLoader(serialPort, { onLog: log });
+    await waitForUsbPort(previousPort);
+    await startSerialListenerWithRetry();
+    if (deviceIp && preference !== "usb" && (await waitForRoleOverWifi(deviceIp, "loader", 10000))) {
+      return deviceIp;
+    }
+    return null;
   }
 
   function setDeviceIp(ip) {
@@ -497,41 +621,24 @@ export function initFlashPage(doc = document) {
         setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
         return;
       }
-      let usedPath = null;
-
-      if (transportPreference === "ota" && !deviceIp) {
-        throw new Error("OTA / WiFi was selected, but the device IP is not available.");
-      }
-
-      if (transportPreference !== "usb" && deviceIp) {
-        try {
-          setStatus(els.statusFpga, "Uploading to board over WiFi…");
-          const responseText = await flashFpgaOta(otaPoster, deviceIp, target, body, updateFpgaProgress);
-          log(responseText);
-          await resumeAppAfterFpga(deviceIp);
-          await closeSerialSession();
-          usedPath = "network";
-        } catch (otaErr) {
-          log(`WiFi OTA upload failed: ${otaErr.message}`);
-          if (isRecovery || !serialPort) throw otaErr; // no fallback available
-          log("Falling back to USB serial…");
-        }
-      }
-
-      if (!usedPath) {
+      setStatus(els.statusFpga, "Preparing the board…");
+      const ip = await enterLoader(els.statusFpga, transportPreference);
+      let usedPath;
+      if (ip) {
+        setStatus(els.statusFpga, "Uploading to board over WiFi…");
+        log(await flashFpgaOta(otaPoster, ip, target, body, updateFpgaProgress));
+        await resumeAppAfterFpga(ip);
+        usedPath = "network";
+      } else {
         if (isRecovery) throw new Error("Recovery requires a working network/IP path — no USB serial equivalent yet.");
-        if (!serialPort) throw new Error("No device IP known and no USB serial port connected.");
         const serialTarget = SERIAL_FPGA_TARGET[target];
         if (!serialTarget) throw new Error("This target has no USB serial equivalent yet — use WiFi OTA.");
-        setStatus(els.statusFpga, "No IP known — flashing over USB serial (slower than WiFi)…");
-        await startSerialListenerWithRetry();
+        setStatus(els.statusFpga, "Flashing over USB serial (slower than WiFi)…");
         await flashFpgaOverSerial(serialPort, reader, serialTarget, new Uint8Array(body), updateFpgaProgress);
         await resumeAppAfterFpga();
-        await closeSerialSession();
         log("FPGA write complete; user app resume requested.");
         usedPath = "serial";
       }
-
       setStatus(
         els.statusFpga,
         usedPath === "network" ? "FPGA programmed successfully via network." : "FPGA programmed successfully via USB serial.",
@@ -559,19 +666,16 @@ export function initFlashPage(doc = document) {
     try {
       const data = await fetchBundledArtifact(bundledA2600Core);
       if (detectBinaryImageType(data) !== "fpga") throw new Error("The bundled A2600 file is not a Gowin FPGA bitstream.");
-      if (deviceIp) {
-        const responseText = await flashFpgaOta(otaPoster, deviceIp, "/fpga-update", data.buffer, updateFpgaProgress);
-        log(responseText);
-        await resumeAppAfterFpga(deviceIp);
-        setStatus(els.statusA2600, "A2600 core programmed successfully via WiFi.", "ok");
-      } else if (serialPort) {
-        await startSerialListenerWithRetry();
-        await flashFpgaOverSerial(serialPort, reader, SERIAL_FPGA_TARGET["/fpga-update"], data, updateFpgaProgress);
-        await resumeAppAfterFpga();
-        setStatus(els.statusA2600, "A2600 core programmed successfully via USB.", "ok");
+      const ip = await enterLoader(els.statusA2600);
+      setStatus(els.statusA2600, `Writing A2600 core ${bundledA2600Core.release}…`);
+      if (ip) {
+        log(await flashFpgaOta(otaPoster, ip, "/fpga-update", data.buffer, updateFpgaProgress));
       } else {
-        throw new Error("Connect USB or enter the board IP first.");
+        await flashFpgaOverSerial(serialPort, reader, SERIAL_FPGA_TARGET["/fpga-update"], data, updateFpgaProgress);
       }
+      setStatus(els.statusA2600, "Core written — restarting FPGA-Companion…");
+      await resumeAppAfterFpga(ip);
+      setStatus(els.statusA2600, `A2600 core programmed successfully via ${ip ? "WiFi" : "USB"}.`, "ok");
     } catch (err) {
       log(`A2600 core flash failed: ${err.message}`);
       setStatus(els.statusA2600, `A2600 core flash failed: ${err.message}`, "error");
@@ -586,6 +690,20 @@ export function initFlashPage(doc = document) {
     setStatus(els.statusRom, "Downloading the Papilio Splash demo ROM…");
     try {
       const data = await fetchBundledArtifact(bundledA2600Rom);
+      // /rom-load lives in FPGA-Companion, not the bootloader.
+      let role = await probeRole(deviceIp, 3000);
+      if (role === "loader") {
+        setStatus(els.statusRom, "Returning the board to FPGA-Companion…");
+        await resumeAppAfterFpga(deviceIp);
+        role = null;
+      }
+      if (role !== "app") {
+        setStatus(els.statusRom, "Waiting for FPGA-Companion on WiFi…");
+        if (!(await waitForRoleOverWifi(deviceIp, "app", 30000))) {
+          throw new Error(`FPGA-Companion did not answer at ${deviceIp}. Check the board is on WiFi, then retry.`);
+        }
+      }
+      setStatus(els.statusRom, "Uploading the Papilio Splash demo ROM…");
       const responseText = await uploadRomOta(otaPoster, deviceIp, bundledA2600Rom.fileName, data.buffer, updateRomProgress);
       log(responseText);
       setStatus(els.statusRom, "Papilio Splash ROM uploaded and inserted. A FAT-formatted SD card is required.", "ok");

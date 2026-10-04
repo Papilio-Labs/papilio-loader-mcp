@@ -92,7 +92,23 @@ async function main() {
     size: bootloader.size,
     publishedAt: recoveryRelease.published_at,
     sourceUrl: bootloader.sourceUrl,
+    releaseUrl: recoveryRelease.html_url,
     fetchedAt: new Date().toISOString(),
+    // What the merged recovery image contains, for the Step 1 source links.
+    components: {
+      bootloader: {
+        name: "Papilio ESP Bootloader",
+        release: release.tag_name,
+        releaseUrl: release.html_url,
+        repoUrl: "https://github.com/Papilio-Labs/papilio-esp-bootloader",
+      },
+      companion: {
+        name: "FPGA-Companion",
+        release: companionRelease.tag_name,
+        releaseUrl: companionRelease.html_url,
+        repoUrl: "https://github.com/Papilio-Retrocade/FPGA-Companion",
+      },
+    },
     artifacts: {
       bootloader: { ...bootloader, bytes: undefined, release: recoveryRelease.tag_name },
       a2600Core: { ...a2600Core, bytes: undefined, release: a2600Release.tag_name },

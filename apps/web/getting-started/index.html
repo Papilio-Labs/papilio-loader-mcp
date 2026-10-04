@@ -71,6 +71,13 @@
         the board in over USB and flash it to restore the new Papilio ESP Bootloader,
         even if the current firmware is rebooting or is an older FPGA-Companion image.
       </p>
+      <p class="flash-step-desc" id="esp32-sources">
+        Contains the latest
+        <a href="https://github.com/Papilio-Labs/papilio-esp-bootloader/releases/latest" target="_blank" rel="noopener">Papilio ESP Bootloader</a>
+        (<a href="https://github.com/Papilio-Labs/papilio-esp-bootloader" target="_blank" rel="noopener">source</a>) +
+        <a href="https://github.com/Papilio-Retrocade/FPGA-Companion/releases/latest" target="_blank" rel="noopener">FPGA-Companion</a>
+        (<a href="https://github.com/Papilio-Retrocade/FPGA-Companion" target="_blank" rel="noopener">source</a>).
+      </p>
 
       <div class="flash-row">
         <button id="btn-connect" class="btn btn-outline">Connect USB</button>
@@ -129,7 +136,8 @@
       </div>
       <p class="flash-step-desc">
         Downloads the latest published Atari 2600 FPGA core and writes it to the board's FPGA
-        flash. Sent directly from this browser tab — over WiFi if the device's IP is known
+        flash. The page first switches the board into the Papilio ESP Bootloader (which does
+        the flashing), then returns it to FPGA-Companion. Sent directly from this browser tab — over WiFi if the device's IP is known
         (fastest), or over the USB connection from Step 1/2 if it isn't. No cloud relay either way.
       </p>
 
@@ -195,6 +203,6 @@
       <p class="flash-status" id="status-rom"></p>
     </section>  </main>
 
-  <script type="module" src="getting-started.bundle.js?v=0.4.2"></script>
+  <script type="module" src="getting-started.bundle.js?v=0.4.3"></script>
 </body>
 </html>
