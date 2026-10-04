@@ -10,6 +10,7 @@ import {
   resumeAppOverSerial,
   SERIAL_FPGA_TARGET,
   flashFpgaOta,
+  uploadRomOta,
   resumeEsp32Ota,
   createBrowserXhrPoster,
   detectBinaryImageType,
@@ -48,6 +49,10 @@ export function initFlashPage(doc = document) {
     btnFlashFpga: doc.getElementById("btn-flash-fpga"),
     progressFpga: doc.getElementById("progress-fpga"),
     statusFpga: doc.getElementById("status-fpga"),
+    btnFlashA2600: doc.getElementById("btn-flash-a2600"),
+    statusA2600: doc.getElementById("status-a2600"),
+    btnLoadRom: doc.getElementById("btn-load-rom"),
+    statusRom: doc.getElementById("status-rom"),
     transportPreference: doc.getElementById("transport-preference"),
   };
 
@@ -102,11 +107,13 @@ export function initFlashPage(doc = document) {
   // flash the latest official release with no manual download — falls back
   // to the file picker below if the manifest can't be fetched.
   let bundledFirmware = null; // { version, fileName } once fetched
+  let bundledA2600Core = null;
+  let bundledA2600Rom = null;
   const assetVersion = typeof __LOADER_VERSION__ !== "undefined" ? __LOADER_VERSION__ : "dev";
 
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
-    [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFindIp, els.btnOpenLog, els.btnCloseLog].forEach(
+    [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFlashA2600, els.btnLoadRom, els.btnFindIp, els.btnOpenLog, els.btnCloseLog].forEach(
       (btn) => (btn.disabled = true)
     );
     return;
@@ -120,14 +127,18 @@ export function initFlashPage(doc = document) {
       })
       .then((manifest) => {
         bundledFirmware = manifest;
+        bundledA2600Core = manifest.artifacts?.a2600Core || null;
+        bundledA2600Rom = manifest.artifacts?.a2600Rom || null;
         els.esp32BundledVersion.textContent = manifest.version;
         updateFlashEsp32Enabled();
+        updateA2600Enabled();
       })
       .catch((err) => {
         log(`Bundled firmware unavailable (${err.message}) — use "different firmware file" below.`);
         els.esp32BundledVersion.textContent = "unavailable";
         if (els.esp32Advanced) els.esp32Advanced.open = true;
         updateFlashEsp32Enabled();
+        updateA2600Enabled();
       });
   }
 
@@ -209,6 +220,7 @@ export function initFlashPage(doc = document) {
     els.deviceIp.textContent = ip;
     setStatus(els.statusWifi, `Board connected — IP ${ip}`, "ok");
     updateFlashFpgaEnabled();
+    updateA2600Enabled();
   }
 
   /* -------------------------------------------------------------------- */
@@ -243,6 +255,12 @@ export function initFlashPage(doc = document) {
     const hasTransport = Boolean(deviceIp || serialPort);
     const hasFile = isRecovery ? Boolean(deviceIp) : Boolean(els.fpgaFile.files[0]) && fpgaImageType === "fpga";
     els.btnFlashFpga.disabled = !(hasTransport && hasFile);
+  }
+
+  function updateA2600Enabled() {
+    const hasTransport = Boolean(deviceIp || serialPort);
+    if (els.btnFlashA2600) els.btnFlashA2600.disabled = !(hasTransport && bundledA2600Core);
+    if (els.btnLoadRom) els.btnLoadRom.disabled = !(deviceIp && bundledA2600Rom);
   }
 
   // The firmware streams the uploaded bytes verbatim to flash or JTAG SRAM —
@@ -358,6 +376,7 @@ export function initFlashPage(doc = document) {
     }
     setDeviceIp(ip);
     setStatus(els.statusWifi, `Using manually entered IP ${ip}.`, "ok");
+    updateA2600Enabled();
   });
 
   // Two clicks, not one: the port picker only lists devices the OS has
@@ -381,6 +400,7 @@ export function initFlashPage(doc = document) {
       log("Serial port selected.");
       await startSerialListener();
       setStatus(els.statusWifi, "Listening on USB — press the RESET button on your board to see its IP.");
+      updateA2600Enabled();
     } catch (err) {
       log(`Find IP failed: ${err.message}`);
       setStatus(els.statusWifi, `Find IP failed: ${err.message}`, "error");
@@ -473,4 +493,56 @@ export function initFlashPage(doc = document) {
       els.btnFlashFpga.disabled = false;
     }
   });
+
+  async function fetchBundledArtifact(artifact) {
+    const response = await fetch(`firmware/${artifact.fileName}?v=${encodeURIComponent(assetVersion)}`);
+    if (!response.ok) throw new Error(`Download failed (HTTP ${response.status})`);
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async function flashBundledA2600() {
+    els.btnFlashA2600.disabled = true;
+    setStatus(els.statusA2600, `Downloading A2600 core ${bundledA2600Core.release}…`);
+    try {
+      const data = await fetchBundledArtifact(bundledA2600Core);
+      if (detectBinaryImageType(data) !== "fpga") throw new Error("The bundled A2600 file is not a Gowin FPGA bitstream.");
+      if (deviceIp) {
+        const responseText = await flashFpgaOta(otaPoster, deviceIp, "/fpga-update", data.buffer, updateFpgaProgress);
+        log(responseText);
+        await resumeAppAfterFpga(deviceIp);
+        setStatus(els.statusA2600, "A2600 core programmed successfully via WiFi.", "ok");
+      } else if (serialPort) {
+        await startSerialListenerWithRetry();
+        await flashFpgaOverSerial(serialPort, reader, SERIAL_FPGA_TARGET["/fpga-update"], data, updateFpgaProgress);
+        await resumeAppAfterFpga();
+        setStatus(els.statusA2600, "A2600 core programmed successfully via USB.", "ok");
+      } else {
+        throw new Error("Connect USB or enter the board IP first.");
+      }
+    } catch (err) {
+      log(`A2600 core flash failed: ${err.message}`);
+      setStatus(els.statusA2600, `A2600 core flash failed: ${err.message}`, "error");
+    } finally {
+      updateA2600Enabled();
+    }
+  }
+
+  async function loadBundledRom() {
+    els.btnLoadRom.disabled = true;
+    setStatus(els.statusRom, "Downloading the Papilio Splash ROM…");
+    try {
+      const data = await fetchBundledArtifact(bundledA2600Rom);
+      const responseText = await uploadRomOta(otaPoster, deviceIp, bundledA2600Rom.fileName, data.buffer, updateFpgaProgress);
+      log(responseText);
+      setStatus(els.statusRom, "Papilio Splash ROM uploaded and inserted. A FAT-formatted SD card is required.", "ok");
+    } catch (err) {
+      log(`ROM upload failed: ${err.message}`);
+      setStatus(els.statusRom, `ROM upload failed: ${err.message}`, "error");
+    } finally {
+      updateA2600Enabled();
+    }
+  }
+
+  els.btnFlashA2600?.addEventListener("click", flashBundledA2600);
+  els.btnLoadRom?.addEventListener("click", loadBundledRom);
 }

@@ -94,6 +94,20 @@ export async function flashFpgaOta(
   return poster.post(url, body, onProgress);
 }
 
+// POST /rom-load?name=... — writes a ROM image to the Companion's SD card
+// and asks the active core to insert it into drive 0.
+export async function uploadRomOta(
+  poster: OtaPoster,
+  ip: string,
+  fileName: string,
+  body: BodyInit,
+  onProgress: OtaProgressCallback,
+  port: number = OTA_PORT
+): Promise<string> {
+  const url = `http://${ip}:${port}/rom-load?name=${encodeURIComponent(fileName)}`;
+  return poster.post(url, body, onProgress);
+}
+
 // Browser-only poster (uses XMLHttpRequest for real upload.onprogress events
 // — fetch()'s ReadableStream request bodies don't expose upload progress in
 // any browser yet). Kept in this file behind a runtime guard rather than a

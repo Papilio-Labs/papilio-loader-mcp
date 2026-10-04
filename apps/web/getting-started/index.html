@@ -148,6 +148,14 @@
         <button id="btn-flash-fpga" class="btn btn-primary" disabled>Flash FPGA</button>
       </div>
 
+      <div class="flash-row">
+        <button id="btn-flash-a2600" class="btn btn-primary" disabled>Install Latest A2600 Core</button>
+        <button id="btn-load-rom" class="btn btn-outline" disabled>Load Papilio Splash ROM</button>
+      </div>
+      <p class="flash-status" id="status-a2600"></p>
+      <p class="flash-status" id="status-rom"></p>
+      <p class="flash-step-desc">The bundled core and ROM are fetched from their latest published releases. ROM loading needs a FAT-formatted SD card in the board.</p>
+
       <details class="flash-advanced" id="loader-advanced">
         <summary>Advanced options</summary>
         <div class="flash-row">
