@@ -121,43 +121,46 @@
       </div>
     </section>
 
-    <!-- STEP 3 — Flash FPGA bitstream via OTA -->
+    <!-- STEP 3 — Install the A2600 core -->
     <section class="flash-step" id="step-fpga">
       <div class="flash-step-header">
         <span class="flash-step-num">3</span>
-        <h2>Flash FPGA Bitstream (WiFi or USB)</h2>
+        <h2>Install the Latest A2600 Core</h2>
       </div>
       <p class="flash-step-desc">
-        Sent directly from this browser tab to the board — over WiFi if the device's IP is known
-        (fastest), or over the same USB connection from Step 1/2 as a fallback if it isn't. No cloud
-        relay either way. Only Gowin's headerless <strong>.bin</strong> ("Binary File") bitstream
-        export is supported for either target below — <strong>.fs</strong> exports aren't parsed by
-        the firmware yet. <em>Recovery</em> requires a known IP (WiFi OTA only for now).
+        Downloads the latest published Atari 2600 FPGA core and writes it to the board's FPGA
+        flash. Sent directly from this browser tab — over WiFi if the device's IP is known
+        (fastest), or over the USB connection from Step 1/2 if it isn't. No cloud relay either way.
       </p>
 
       <div class="flash-row">
-        <label class="file-picker">
-          <input type="file" id="fpga-file" accept=".bin">
-          <span id="fpga-file-label">Choose bitstream .bin&hellip;</span>
-        </label>
-        <select id="fpga-target">
-          <option value="/fpga-update">SPI Flash (persistent)</option>
-          <option value="/fpga-jtag-sram">JTAG SRAM (fast, volatile)</option>
-          <option value="/fpga-recover">Recovery (erase bitstream region)</option>
-        </select>
-        <button id="btn-flash-fpga" class="btn btn-primary" disabled>Flash FPGA</button>
+        <button id="btn-flash-a2600" class="btn btn-primary" disabled>Install Latest A2600 Core</button>
       </div>
 
-      <div class="flash-row">
-        <button id="btn-flash-a2600" class="btn btn-primary" disabled>Install Latest A2600 Core</button>
-        <button id="btn-load-rom" class="btn btn-outline" disabled>Load Papilio Splash ROM</button>
+      <div class="progress" id="progress-fpga" hidden>
+        <div class="progress-bar" style="width:0%"></div>
       </div>
       <p class="flash-status" id="status-a2600"></p>
-      <p class="flash-status" id="status-rom"></p>
-      <p class="flash-step-desc">The bundled core and ROM are fetched from their latest published releases. ROM loading needs a FAT-formatted SD card in the board.</p>
 
       <details class="flash-advanced" id="loader-advanced">
-        <summary>Advanced options</summary>
+        <summary>Flash a different bitstream instead</summary>
+        <p class="flash-step-desc">
+          Only Gowin's headerless <strong>.bin</strong> ("Binary File") bitstream export is
+          supported — <strong>.fs</strong> exports aren't parsed by the firmware yet.
+          <em>Recovery</em> requires a known IP (WiFi OTA only for now).
+        </p>
+        <div class="flash-row">
+          <label class="file-picker">
+            <input type="file" id="fpga-file" accept=".bin">
+            <span id="fpga-file-label">Choose bitstream .bin&hellip;</span>
+          </label>
+          <select id="fpga-target">
+            <option value="/fpga-update">SPI Flash (persistent)</option>
+            <option value="/fpga-jtag-sram">JTAG SRAM (fast, volatile)</option>
+            <option value="/fpga-recover">Recovery (erase bitstream region)</option>
+          </select>
+          <button id="btn-flash-fpga" class="btn btn-primary" disabled>Flash FPGA</button>
+        </div>
         <div class="flash-row">
           <label for="transport-preference">FPGA transport</label>
           <select id="transport-preference">
@@ -166,15 +169,32 @@
             <option value="usb">USB / Serial only</option>
           </select>
         </div>
+        <p class="flash-status" id="status-fpga"></p>
       </details>
+    </section>
 
-      <div class="progress" id="progress-fpga" hidden>
+    <!-- STEP 4 — Load a demo game ROM -->
+    <section class="flash-step" id="step-rom">
+      <div class="flash-step-header">
+        <span class="flash-step-num">4</span>
+        <h2>Load a Demo Game ROM</h2>
+      </div>
+      <p class="flash-step-desc">
+        Sends the Papilio Splash demo ROM to the A2600 core installed in Step 3. Insert a
+        <strong>FAT-formatted SD card</strong> first — the ROM is saved to the card and then
+        started on the core. Requires WiFi (a known device IP from Step 2).
+      </p>
+
+      <div class="flash-row">
+        <button id="btn-load-rom" class="btn btn-primary" disabled>Load Papilio Splash ROM</button>
+      </div>
+
+      <div class="progress" id="progress-rom" hidden>
         <div class="progress-bar" style="width:0%"></div>
       </div>
-      <p class="flash-status" id="status-fpga"></p>
-    </section>
-  </main>
+      <p class="flash-status" id="status-rom"></p>
+    </section>  </main>
 
-  <script type="module" src="getting-started.bundle.js?v=0.4.1"></script>
+  <script type="module" src="getting-started.bundle.js?v=0.4.2"></script>
 </body>
 </html>

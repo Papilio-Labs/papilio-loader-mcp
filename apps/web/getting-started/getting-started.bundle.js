@@ -9501,6 +9501,7 @@ function initFlashPage(doc = document) {
     statusA2600: doc.getElementById("status-a2600"),
     btnLoadRom: doc.getElementById("btn-load-rom"),
     statusRom: doc.getElementById("status-rom"),
+    progressRom: doc.getElementById("progress-rom"),
     transportPreference: doc.getElementById("transport-preference")
   };
   if (els.fpgaTarget) els.fpgaTarget.value = "/fpga-update";
@@ -9549,7 +9550,7 @@ function initFlashPage(doc = document) {
   let bundledFirmware = null;
   let bundledA2600Core = null;
   let bundledA2600Rom = null;
-  const assetVersion = true ? "0.4.0" : "dev";
+  const assetVersion = true ? "0.4.2" : "dev";
   if (!("serial" in navigator)) {
     els.unsupportedBanner.hidden = false;
     [els.btnConnect, els.btnFlashEsp32, els.btnSendWifi, els.btnFlashFpga, els.btnFlashA2600, els.btnLoadRom, els.btnFindIp, els.btnOpenLog, els.btnCloseLog].forEach(
@@ -9579,9 +9580,7 @@ function initFlashPage(doc = document) {
   navigator.serial.addEventListener("connect", (event) => {
     if (!awaitingReconnect) return;
     awaitingReconnect = false;
-    serialPort = event.target;
-    reader = new SerialLineReader(serialPort);
-    wireReaderEvents();
+    adoptPort(event.target);
     log("Board USB reconnected after reset, resuming serial listener\u2026");
     startSerialListener().catch((err2) => log(`Serial listener failed to resume: ${err2.message}`));
   });
@@ -9603,12 +9602,44 @@ function initFlashPage(doc = document) {
     if (reader.isRunning) return;
     await reader.start();
   }
+  function adoptPort(port) {
+    serialPort = port;
+    reader = new SerialLineReader(port);
+    wireReaderEvents();
+  }
+  async function reacquireGrantedPort() {
+    const prevInfo = serialPort?.getInfo?.() || {};
+    const ports = await navigator.serial.getPorts();
+    const candidates = ports.filter((port) => {
+      if (port === serialPort) return false;
+      const info = port.getInfo?.() || {};
+      if (prevInfo.usbVendorId && info.usbVendorId !== prevInfo.usbVendorId) return false;
+      if (prevInfo.usbProductId && info.usbProductId !== prevInfo.usbProductId) return false;
+      return true;
+    });
+    for (const port of candidates) {
+      const candidateReader = new SerialLineReader(port);
+      try {
+        await candidateReader.start();
+      } catch {
+        continue;
+      }
+      serialPort = port;
+      reader = candidateReader;
+      wireReaderEvents();
+      log("Re-acquired the board's USB serial port after re-enumeration.");
+      return true;
+    }
+    return false;
+  }
   async function startSerialListenerWithRetry(maxAttempts = 3, delayMs = 750) {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (reader?.isRunning) return;
       try {
         await startSerialListener();
         return;
       } catch (err2) {
+        if (await reacquireGrantedPort().catch(() => false)) return;
         if (attempt === maxAttempts) throw err2;
         log(`USB serial port not ready (attempt ${attempt}/${maxAttempts}), retrying...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -9729,6 +9760,7 @@ function initFlashPage(doc = document) {
         }
       });
       await closeSerialSession();
+      awaitingReconnect = true;
       log("ESP32 write complete; USB serial port closed.");
       setStatus(els.statusEsp32, "ESP32 flashed.", "ok");
       els.btnSendWifi.disabled = false;
@@ -9748,12 +9780,16 @@ function initFlashPage(doc = document) {
       return;
     }
     try {
-      await startSerialListenerWithRetry(8, 500);
+      await startSerialListenerWithRetry(10, 750);
       await sendWifiCredentials(serialPort, ssid, pass);
       setStatus(els.statusWifi, "Credentials sent, waiting for board to confirm\u2026");
     } catch (err2) {
       log(`Send WiFi credentials failed: ${err2.message}`);
-      setStatus(els.statusWifi, `Send failed: ${err2.message}`, "error");
+      setStatus(
+        els.statusWifi,
+        `Send failed: ${err2.message} Unplug and replug the board's USB cable, click Find My IP to pick its port again, then click Send to Board.`,
+        "error"
+      );
     }
   });
   els.btnUseManualIp.addEventListener("click", () => {
@@ -9775,11 +9811,12 @@ function initFlashPage(doc = document) {
       return;
     }
     try {
-      serialPort = await navigator.serial.requestPort();
-      reader = new SerialLineReader(serialPort);
-      wireReaderEvents();
+      const picked = await navigator.serial.requestPort();
+      await closeSerialSession();
+      adoptPort(picked);
       log("Serial port selected.");
       await startSerialListener();
+      els.btnSendWifi.disabled = false;
       setStatus(els.statusWifi, "Listening on USB \u2014 press the RESET button on your board to see its IP.");
       updateA2600Enabled();
     } catch (err2) {
@@ -9793,6 +9830,10 @@ function initFlashPage(doc = document) {
   function updateFpgaProgress(loaded, total) {
     const pct = total ? Math.round(loaded / total * 100) : 0;
     els.progressFpga.querySelector(".progress-bar").style.width = `${pct}%`;
+  }
+  function updateRomProgress(loaded, total) {
+    const bar = (els.progressRom || els.progressFpga).querySelector(".progress-bar");
+    bar.style.width = `${total ? Math.round(loaded / total * 100) : 0}%`;
   }
   els.btnFlashFpga.addEventListener("click", async () => {
     const target = els.fpgaTarget.value;
@@ -9868,6 +9909,8 @@ function initFlashPage(doc = document) {
   }
   async function flashBundledA2600() {
     els.btnFlashA2600.disabled = true;
+    els.progressFpga.hidden = false;
+    updateFpgaProgress(0, 1);
     setStatus(els.statusA2600, `Downloading A2600 core ${bundledA2600Core.release}\u2026`);
     try {
       const data = await fetchBundledArtifact(bundledA2600Core);
@@ -9894,10 +9937,11 @@ function initFlashPage(doc = document) {
   }
   async function loadBundledRom() {
     els.btnLoadRom.disabled = true;
-    setStatus(els.statusRom, "Downloading the Papilio Splash ROM\u2026");
+    if (els.progressRom) els.progressRom.hidden = false;
+    setStatus(els.statusRom, "Downloading the Papilio Splash demo ROM\u2026");
     try {
       const data = await fetchBundledArtifact(bundledA2600Rom);
-      const responseText = await uploadRomOta(otaPoster, deviceIp, bundledA2600Rom.fileName, data.buffer, updateFpgaProgress);
+      const responseText = await uploadRomOta(otaPoster, deviceIp, bundledA2600Rom.fileName, data.buffer, updateRomProgress);
       log(responseText);
       setStatus(els.statusRom, "Papilio Splash ROM uploaded and inserted. A FAT-formatted SD card is required.", "ok");
     } catch (err2) {

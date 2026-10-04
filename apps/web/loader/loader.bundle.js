@@ -9721,7 +9721,7 @@ function initLoaderPage(doc = document, win = window) {
     appVersion: doc.getElementById("app-version")
   };
   if (els.appVersion) {
-    els.appVersion.textContent = `v${true ? "0.4.0" : "dev"}`;
+    els.appVersion.textContent = `v${true ? "0.4.2" : "dev"}`;
   }
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
