@@ -2178,6 +2178,7 @@ var SerialLineReader = class {
   reader = null;
   loopDone = Promise.resolve();
   resolveLoopDone = null;
+  pipeDone = Promise.resolve();
   constructor(port, baudRate = 115200) {
     this.port = port;
     this.baudRate = baudRate;
@@ -2212,7 +2213,7 @@ var SerialLineReader = class {
       this.resolveLoopDone = resolve;
     });
     const decoder = new TextDecoderStream();
-    this.port.readable.pipeTo(decoder.writable).catch(() => {
+    this.pipeDone = this.port.readable.pipeTo(decoder.writable).catch(() => {
     });
     const reader = decoder.readable.getReader();
     this.reader = reader;
@@ -2254,6 +2255,7 @@ var SerialLineReader = class {
     this.reader?.cancel().catch(() => {
     });
     await this.loopDone;
+    await Promise.race([this.pipeDone, new Promise((resolve) => setTimeout(resolve, 1e3))]);
   }
   handleLine(line) {
     for (const listener of this.lineListeners)
@@ -2300,21 +2302,6 @@ function watchProvisioningLine(line, events) {
   }
   if (line.includes("WIFI_CFG_ERR")) {
     events.onStatus?.("Board rejected credentials \u2014 try again.", "error");
-  }
-}
-async function sendWifiCredentials(port, ssid, pass) {
-  if (!port.writable) {
-    throw new Error("Serial port is not open for writing \u2014 start the serial listener first.");
-  }
-  const writer = port.writable.getWriter();
-  const encoder = new TextEncoder();
-  try {
-    await writer.write(encoder.encode(`WIFI_SSID=${ssid}
-`));
-    await writer.write(encoder.encode(`WIFI_PASS=${pass}
-`));
-  } finally {
-    writer.releaseLock();
   }
 }
 
@@ -2364,27 +2351,6 @@ async function flashFpgaOverSerial(port, reader, target, data, onProgress) {
       throw new Error(`Board reported: ${resultLine}`);
     }
     onProgress(size, size);
-  } finally {
-    writer.releaseLock();
-  }
-}
-
-// ../../packages/flasher-core/dist/app-serial.js
-async function resumeAppOverSerial(port, reader) {
-  if (!port)
-    throw new Error("No USB serial port connected.");
-  if (!reader.isRunning)
-    await reader.start();
-  if (!port.writable)
-    throw new Error("No USB serial port connected.");
-  const writer = port.writable.getWriter();
-  try {
-    const resultPromise = reader.waitForLine(/^RESUME_OK$|^RESUME_ERROR /, 1e4);
-    await writer.write(new TextEncoder().encode("RESUME_APP\n"));
-    const resultLine = await resultPromise;
-    if (resultLine.startsWith("RESUME_ERROR")) {
-      throw new Error(`Board reported: ${resultLine}`);
-    }
   } finally {
     writer.releaseLock();
   }
@@ -9395,7 +9361,191 @@ any other hardware connected to IOs.`);
 // ../../node_modules/esptool-js/lib/index.js
 init_rom();
 
+// ../../packages/flasher-core/dist/nvs-image.js
+var NVS_PAGE_SIZE = 4096;
+var NVS_ENTRY_SIZE = 32;
+var NVS_ENTRIES_PER_PAGE = 126;
+var NVS_FIRST_ENTRY_OFFSET = 64;
+var NVS_PAGE_STATE_ACTIVE = 4294967294;
+var NVS_PAGE_VERSION_2 = 254;
+var NVS_TYPE_U8 = 1;
+var NVS_TYPE_STR = 33;
+var NVS_KEY_MAX = 15;
+var CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++)
+      c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+function crc322(data, start = 0) {
+  let crc = ~start >>> 0;
+  for (let i = 0; i < data.length; i++)
+    crc = CRC_TABLE[(crc ^ data[i]) & 255] ^ crc >>> 8;
+  return ~crc >>> 0;
+}
+function parsePartitionTable(table) {
+  const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+  const entries = [];
+  for (let pos = 0; pos + 32 <= table.length; pos += 32) {
+    if (table[pos] !== 170 || table[pos + 1] !== 80)
+      break;
+    const labelBytes = table.subarray(pos + 12, pos + 28);
+    const nul = labelBytes.indexOf(0);
+    entries.push({
+      type: table[pos + 2],
+      subtype: table[pos + 3],
+      offset: view.getUint32(pos + 4, true),
+      size: view.getUint32(pos + 8, true),
+      label: new TextDecoder().decode(nul >= 0 ? labelBytes.subarray(0, nul) : labelBytes)
+    });
+  }
+  return entries;
+}
+function writeKey(entry, key) {
+  const bytes = new TextEncoder().encode(key);
+  if (bytes.length > NVS_KEY_MAX)
+    throw new Error(`NVS key "${key}" is longer than ${NVS_KEY_MAX} bytes.`);
+  entry.fill(0, 8, 24);
+  entry.set(bytes, 8);
+}
+function finishEntryCrc(entry) {
+  const crcInput = new Uint8Array(28);
+  crcInput.set(entry.subarray(0, 4), 0);
+  crcInput.set(entry.subarray(8, 32), 4);
+  new DataView(entry.buffer, entry.byteOffset, 32).setUint32(4, crc322(crcInput, 4294967295), true);
+}
+function buildNvsPartition(namespaces, partitionSize) {
+  if (partitionSize < NVS_PAGE_SIZE * 2 || partitionSize % NVS_PAGE_SIZE !== 0) {
+    throw new Error(`Invalid NVS partition size 0x${partitionSize.toString(16)}.`);
+  }
+  const image = new Uint8Array(partitionSize).fill(255);
+  const page = image.subarray(0, NVS_PAGE_SIZE);
+  const header = new DataView(page.buffer, page.byteOffset, 32);
+  header.setUint32(0, NVS_PAGE_STATE_ACTIVE, true);
+  header.setUint32(4, 0, true);
+  page[8] = NVS_PAGE_VERSION_2;
+  header.setUint32(28, crc322(page.subarray(4, 28), 4294967295), true);
+  let index = 0;
+  const allocate = (span) => {
+    if (index + span > NVS_ENTRIES_PER_PAGE)
+      throw new Error("NVS data does not fit in one page.");
+    const start = NVS_FIRST_ENTRY_OFFSET + index * NVS_ENTRY_SIZE;
+    for (let i = index; i < index + span; i++) {
+      page[32 + (i >> 2)] &= ~(1 << i % 4 * 2);
+    }
+    index += span;
+    return page.subarray(start, start + span * NVS_ENTRY_SIZE);
+  };
+  let nsIndex = 0;
+  for (const [nsName, keys] of Object.entries(namespaces)) {
+    nsIndex += 1;
+    const nsEntry = allocate(1);
+    nsEntry.set([0, NVS_TYPE_U8, 1, 255]);
+    writeKey(nsEntry, nsName);
+    nsEntry[24] = nsIndex;
+    finishEntryCrc(nsEntry);
+    for (const [key, item] of Object.entries(keys)) {
+      if (item.type === "u8") {
+        const entry2 = allocate(1);
+        entry2.set([nsIndex, NVS_TYPE_U8, 1, 255]);
+        writeKey(entry2, key);
+        entry2[24] = item.value & 255;
+        finishEntryCrc(entry2);
+        continue;
+      }
+      const encoded = new TextEncoder().encode(item.value);
+      const data = new Uint8Array(encoded.length + 1);
+      data.set(encoded);
+      const dataEntries = Math.ceil(data.length / NVS_ENTRY_SIZE);
+      const block = allocate(1 + dataEntries);
+      const entry = block.subarray(0, NVS_ENTRY_SIZE);
+      entry.set([nsIndex, NVS_TYPE_STR, 1 + dataEntries, 255]);
+      writeKey(entry, key);
+      const dv = new DataView(entry.buffer, entry.byteOffset, NVS_ENTRY_SIZE);
+      dv.setUint16(24, data.length, true);
+      dv.setUint16(26, 65535, true);
+      dv.setUint32(28, crc322(data, 4294967295), true);
+      finishEntryCrc(entry);
+      block.set(data, NVS_ENTRY_SIZE);
+    }
+  }
+  return image;
+}
+function buildOtadataSelectingSlot(slot, partitionSize = 8192) {
+  const image = new Uint8Array(partitionSize).fill(255);
+  const seq = slot + 1;
+  const seqBytes = new Uint8Array(4);
+  new DataView(seqBytes.buffer).setUint32(0, seq, true);
+  const dv = new DataView(image.buffer);
+  dv.setUint32(0, seq, true);
+  dv.setUint32(28, crc322(seqBytes, 4294967295), true);
+  return image;
+}
+var PARTITION_TYPE_APP = 0;
+var PARTITION_TYPE_DATA = 1;
+var SUBTYPE_OTA_DATA = 0;
+var SUBTYPE_OTA_0 = 16;
+function buildBoardProvisioningRegions(partitions, options) {
+  const find = (label) => partitions.find((p) => p.label === label);
+  const otadata = partitions.find((p) => p.type === PARTITION_TYPE_DATA && p.subtype === SUBTYPE_OTA_DATA);
+  const ota0 = partitions.find((p) => p.type === PARTITION_TYPE_APP && p.subtype === SUBTYPE_OTA_0);
+  const nvs = find("nvs");
+  const nvsLoader = find("nvs_loader");
+  if (!otadata || !ota0 || !nvs) {
+    throw new Error("The board's partition table has no nvs/otadata/ota_0 partition \u2014 flash the Step 1 firmware first.");
+  }
+  const wifi = {
+    ssid: { type: "string", value: options.ssid },
+    pass: { type: "string", value: options.password }
+  };
+  const regions = [
+    { address: nvs.offset, data: buildNvsPartition({ wifi_cfg: wifi }, nvs.size) },
+    { address: otadata.offset, data: buildOtadataSelectingSlot(0, otadata.size) }
+  ];
+  if (nvsLoader) {
+    regions.push({
+      address: nvsLoader.offset,
+      data: buildNvsPartition({ wifi_cfg: wifi, loader: { last_slot: { type: "u8", value: 0 } } }, nvsLoader.size)
+    });
+  }
+  return regions.sort((a, b) => a.address - b.address);
+}
+var MERGED_PARTITION_TABLE_OFFSET = 32768;
+var MERGED_PARTITION_TABLE_SIZE = 3072;
+function isErased(data) {
+  return data.every((b) => b === 255);
+}
+function seedBootSelectionInMergedImage(image) {
+  if (image.length < MERGED_PARTITION_TABLE_OFFSET + MERGED_PARTITION_TABLE_SIZE)
+    return null;
+  const partitions = parsePartitionTable(image.subarray(MERGED_PARTITION_TABLE_OFFSET, MERGED_PARTITION_TABLE_OFFSET + MERGED_PARTITION_TABLE_SIZE));
+  const otadata = partitions.find((p) => p.type === PARTITION_TYPE_DATA && p.subtype === SUBTYPE_OTA_DATA);
+  const ota0 = partitions.find((p) => p.type === PARTITION_TYPE_APP && p.subtype === SUBTYPE_OTA_0);
+  if (!otadata || !ota0 || image.length <= ota0.offset || image[ota0.offset] !== 233)
+    return null;
+  if (image.length < otadata.offset + otadata.size)
+    return null;
+  const patched = image.slice();
+  let changed = false;
+  if (isErased(patched.subarray(otadata.offset, otadata.offset + otadata.size))) {
+    patched.set(buildOtadataSelectingSlot(0, otadata.size), otadata.offset);
+    changed = true;
+  }
+  const nvsLoader = partitions.find((p) => p.label === "nvs_loader");
+  if (nvsLoader && image.length >= nvsLoader.offset + nvsLoader.size && isErased(patched.subarray(nvsLoader.offset, nvsLoader.offset + nvsLoader.size))) {
+    patched.set(buildNvsPartition({ loader: { last_slot: { type: "u8", value: 0 } } }, nvsLoader.size), nvsLoader.offset);
+    changed = true;
+  }
+  return changed ? patched : null;
+}
+
 // ../../packages/flasher-core/dist/esp32.js
+var PARTITION_TABLE_OFFSET = 32768;
+var PARTITION_TABLE_SIZE = 3072;
 async function watchdogResetEsp32S3(loader) {
   const RTC_CNTL_WDTCONFIG0_REG = 1610645656;
   const RTC_CNTL_WDTCONFIG1_REG = 1610645660;
@@ -9406,6 +9556,100 @@ async function watchdogResetEsp32S3(loader) {
   await loader.writeReg(RTC_CNTL_WDTCONFIG0_REG, 3489661186);
   await loader.writeReg(RTC_CNTL_WDTWPROTECT_REG, 0);
   await new Promise((resolve) => setTimeout(resolve, 500));
+}
+async function provisionBoardOverUsb(port, options) {
+  const transport = new Transport(port, true);
+  const loader = new ESPLoader({
+    transport,
+    baudrate: 115200,
+    terminal: {
+      clean: () => {
+      },
+      writeLine: (msg) => options.onLog?.(msg),
+      write: (msg) => options.onLog?.(msg)
+    }
+  });
+  try {
+    const chipName = await loader.main();
+    options.onLog?.(`Connected to ${chipName}. Reading partition table...`);
+    const partitions = parsePartitionTable(await loader.readFlash(PARTITION_TABLE_OFFSET, PARTITION_TABLE_SIZE));
+    const ota0 = partitions.find((p) => p.type === 0 && p.subtype === 16);
+    if (!ota0)
+      throw new Error("No ota_0 partition found \u2014 flash the Step 1 firmware first.");
+    const appMagic = await loader.readFlash(ota0.offset, 1);
+    if (appMagic[0] !== 233)
+      throw new Error("FPGA-Companion is not installed in ota_0 \u2014 flash the Step 1 firmware first.");
+    const regions = buildBoardProvisioningRegions(partitions, options);
+    options.onLog?.(`Writing WiFi settings and boot selection (${regions.map((r) => `0x${r.address.toString(16)}`).join(", ")})...`);
+    await loader.writeFlash({
+      fileArray: regions,
+      flashMode: "keep",
+      flashFreq: "keep",
+      flashSize: "keep",
+      eraseAll: false,
+      compress: true,
+      reportProgress: (_fileIndex, written, total) => {
+        options.onProgress?.(written, total);
+      }
+    });
+    if (loader.chip && loader.chip.CHIP_NAME === "ESP32-S3") {
+      options.onLog?.("Restarting into FPGA-Companion via RTC watchdog...");
+      await watchdogResetEsp32S3(loader);
+    } else {
+      await loader.after("hard_reset");
+    }
+    return { chipName };
+  } finally {
+    try {
+      await transport.disconnect();
+    } catch {
+    }
+  }
+}
+async function bootCompanionOverUsb(port, options = {}) {
+  const transport = new Transport(port, true);
+  const loader = new ESPLoader({
+    transport,
+    baudrate: 115200,
+    terminal: {
+      clean: () => {
+      },
+      writeLine: (msg) => options.onLog?.(msg),
+      write: (msg) => options.onLog?.(msg)
+    }
+  });
+  try {
+    const chipName = await loader.main();
+    const partitions = parsePartitionTable(await loader.readFlash(PARTITION_TABLE_OFFSET, PARTITION_TABLE_SIZE));
+    const ota0 = partitions.find((p) => p.type === 0 && p.subtype === 16);
+    const otadata = partitions.find((p) => p.type === 1 && p.subtype === 0);
+    if (!ota0 || !otadata)
+      throw new Error("No ota_0/otadata partition found \u2014 flash the Step 1 firmware first.");
+    const appMagic = await loader.readFlash(ota0.offset, 1);
+    if (appMagic[0] !== 233)
+      throw new Error("FPGA-Companion is not installed in ota_0 \u2014 flash the Step 1 firmware first.");
+    options.onLog?.("Selecting FPGA-Companion (ota_0) as the boot app...");
+    await loader.writeFlash({
+      fileArray: [{ address: otadata.offset, data: buildOtadataSelectingSlot(0, otadata.size) }],
+      flashMode: "keep",
+      flashFreq: "keep",
+      flashSize: "keep",
+      eraseAll: false,
+      compress: true
+    });
+    if (loader.chip && loader.chip.CHIP_NAME === "ESP32-S3") {
+      options.onLog?.("Restarting into FPGA-Companion via RTC watchdog...");
+      await watchdogResetEsp32S3(loader);
+    } else {
+      await loader.after("hard_reset");
+    }
+    return { chipName };
+  } finally {
+    try {
+      await transport.disconnect();
+    } catch {
+    }
+  }
 }
 async function flashEsp32(port, data, options = {}) {
   const transport = new Transport(port, true);
@@ -9659,11 +9903,12 @@ function initFlashPage(doc = document) {
   let esp32ImageType = null;
   let fpgaImageType = null;
   let deviceIp = null;
+  let ipSeq = 0;
   let awaitingReconnect = false;
   let bundledFirmware = null;
   let bundledA2600Core = null;
   let bundledA2600Rom = null;
-  const assetVersion = true ? "0.4.3" : "dev";
+  const assetVersion = true ? "0.4.7" : "dev";
   function renderFirmwareSources(manifest) {
     const el = doc.getElementById("esp32-sources");
     const components = manifest.components;
@@ -9791,24 +10036,79 @@ function initFlashPage(doc = document) {
   }
   async function closeSerialSession() {
     if (reader?.isRunning) await reader.stop();
-    if (serialPort?.close) {
+    if (!serialPort?.close) return;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (!serialPort.readable && !serialPort.writable) return;
       try {
         await serialPort.close();
+        return;
       } catch {
+        await sleep3(200);
       }
     }
   }
   async function resumeAppAfterFpga(ip) {
-    if (ip) {
-      try {
-        const responseText = await resumeEsp32Ota(ip);
-        log(responseText);
-      } catch (err2) {
-        log(`Resume response race (likely harmless): ${err2.message}`);
-      }
-      return;
+    if (!await returnToCompanion(ip)) {
+      log(`FPGA-Companion did not come back${ip ? ` at ${ip}` : ""}.`);
     }
-    await resumeAppOverSerial(serialPort, reader);
+  }
+  async function companionIsStable(ip) {
+    if (await probeRole(ip, 2e3) !== "app") return false;
+    await sleep3(6e3);
+    return await probeRole(ip, 2e3) === "app";
+  }
+  async function bootCompanionViaUsb() {
+    await closeSerialSession();
+    const previousPort = serialPort;
+    awaitingReconnect = true;
+    await bootCompanionOverUsb(serialPort, { onLog: log });
+    await waitForUsbPort(previousPort);
+    await startSerialListenerWithRetry();
+  }
+  async function returnToCompanion(ip, timeoutMs = 6e4) {
+    if (ip && await companionIsStable(ip)) {
+      log(`FPGA-Companion is running at ${ip}.`);
+      return true;
+    }
+    if (serialPort) {
+      log("Restarting into FPGA-Companion over USB\u2026");
+      await bootCompanionViaUsb();
+      if (!ip) return true;
+      const started2 = Date.now();
+      while (Date.now() - started2 < timeoutMs) {
+        if (await companionIsStable(ip)) {
+          log(`FPGA-Companion is running at ${ip}.`);
+          return true;
+        }
+        await sleep3(1e3);
+      }
+      return false;
+    }
+    if (!ip) return false;
+    const started = Date.now();
+    let lastResume = 0;
+    while (Date.now() - started < timeoutMs) {
+      const role = await probeRole(ip, 2e3);
+      if (role === "app" && await companionIsStable(ip)) {
+        log(`FPGA-Companion is running at ${ip}.`);
+        return true;
+      }
+      if (role === "loader" && Date.now() - lastResume > 5e3) {
+        lastResume = Date.now();
+        try {
+          log(await resumeEsp32Ota(ip));
+        } catch (err2) {
+          if (/no valid app image/i.test(err2.message)) {
+            throw new Error(
+              "the bootloader does not know which slot holds FPGA-Companion. Enter your WiFi details and click Send to Board in Step 2 (with USB connected) to fix the boot selection, then retry."
+            );
+          }
+          log(`Resume request: ${err2.message}; checking again\u2026`);
+        }
+      }
+      await sleep3(1e3);
+    }
+    return false;
   }
   async function probeRole(ip, timeoutMs = 2e3) {
     try {
@@ -9883,8 +10183,17 @@ function initFlashPage(doc = document) {
     }
     return null;
   }
+  async function waitForNewIp(seqBefore, timeoutMs) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (ipSeq !== seqBefore) return true;
+      await sleep3(250);
+    }
+    return false;
+  }
   function setDeviceIp(ip) {
     deviceIp = ip;
+    ipSeq += 1;
     els.deviceIp.textContent = ip;
     setStatus(els.statusWifi, `Board connected \u2014 IP ${ip}`, "ok");
     updateFlashFpgaEnabled();
@@ -9967,6 +10276,11 @@ function initFlashPage(doc = document) {
         data = new Uint8Array(await resp.arrayBuffer());
         setStatus(els.statusEsp32, "Connecting to ESP32\u2026");
       }
+      const seeded = seedBootSelectionInMergedImage(data);
+      if (seeded) {
+        data = seeded;
+        log("Seeded otadata (boot FPGA-Companion in ota_0) and loader last_slot=0 into the image.");
+      }
       await closeSerialSession();
       await flashEsp32(serialPort, data, {
         onLog: log,
@@ -9995,10 +10309,30 @@ function initFlashPage(doc = document) {
       setStatus(els.statusWifi, "Enter a WiFi network name first.", "error");
       return;
     }
+    if (new TextEncoder().encode(ssid).length > 32 || new TextEncoder().encode(pass).length > 63) {
+      setStatus(els.statusWifi, "WiFi name must be at most 32 bytes and password at most 63.", "error");
+      return;
+    }
+    els.btnSendWifi.disabled = true;
     try {
-      await startSerialListenerWithRetry(10, 750);
-      await sendWifiCredentials(serialPort, ssid, pass);
-      setStatus(els.statusWifi, "Credentials sent, waiting for board to confirm\u2026");
+      if (!serialPort) throw new Error("No USB port selected.");
+      if (!reader?.isRunning) await startSerialListenerWithRetry(10, 750);
+      await closeSerialSession();
+      const previousPort = serialPort;
+      const ipSeqBefore = ipSeq;
+      setStatus(els.statusWifi, "Writing WiFi settings to the board\u2026");
+      await provisionBoardOverUsb(serialPort, { ssid, password: pass, onLog: log });
+      awaitingReconnect = true;
+      setStatus(els.statusWifi, "Settings saved. Board is restarting into FPGA-Companion and joining WiFi\u2026");
+      await waitForUsbPort(previousPort);
+      await startSerialListenerWithRetry();
+      if (!await waitForNewIp(ipSeqBefore, 3e4)) {
+        setStatus(
+          els.statusWifi,
+          "Settings saved, but the board hasn't reported an IP yet. Check the WiFi name/password (2.4 GHz only), or click Find My IP.",
+          "error"
+        );
+      }
     } catch (err2) {
       log(`Send WiFi credentials failed: ${err2.message}`);
       setStatus(
@@ -10006,6 +10340,8 @@ function initFlashPage(doc = document) {
         `Send failed: ${err2.message} Unplug and replug the board's USB cable, click Find My IP to pick its port again, then click Send to Board.`,
         "error"
       );
+    } finally {
+      els.btnSendWifi.disabled = false;
     }
   });
   els.btnUseManualIp.addEventListener("click", () => {
@@ -10126,7 +10462,9 @@ function initFlashPage(doc = document) {
         await flashFpgaOverSerial(serialPort, reader, SERIAL_FPGA_TARGET["/fpga-update"], data, updateFpgaProgress);
       }
       setStatus(els.statusA2600, "Core written \u2014 restarting FPGA-Companion\u2026");
-      await resumeAppAfterFpga(ip);
+      if (!await returnToCompanion(ip)) {
+        throw new Error(`the core was written, but the board did not return to FPGA-Companion${ip ? ` at ${ip}` : ""}. Step 4 will retry the switch.`);
+      }
       setStatus(els.statusA2600, `A2600 core programmed successfully via ${ip ? "WiFi" : "USB"}.`, "ok");
     } catch (err2) {
       log(`A2600 core flash failed: ${err2.message}`);
@@ -10141,17 +10479,9 @@ function initFlashPage(doc = document) {
     setStatus(els.statusRom, "Downloading the Papilio Splash demo ROM\u2026");
     try {
       const data = await fetchBundledArtifact(bundledA2600Rom);
-      let role = await probeRole(deviceIp, 3e3);
-      if (role === "loader") {
-        setStatus(els.statusRom, "Returning the board to FPGA-Companion\u2026");
-        await resumeAppAfterFpga(deviceIp);
-        role = null;
-      }
-      if (role !== "app") {
-        setStatus(els.statusRom, "Waiting for FPGA-Companion on WiFi\u2026");
-        if (!await waitForRoleOverWifi(deviceIp, "app", 3e4)) {
-          throw new Error(`FPGA-Companion did not answer at ${deviceIp}. Check the board is on WiFi, then retry.`);
-        }
+      setStatus(els.statusRom, "Making sure the board is running FPGA-Companion\u2026");
+      if (!await returnToCompanion(deviceIp)) {
+        throw new Error(`FPGA-Companion did not answer at ${deviceIp}. Check the board is on WiFi, then retry.`);
       }
       setStatus(els.statusRom, "Uploading the Papilio Splash demo ROM\u2026");
       const responseText = await uploadRomOta(otaPoster, deviceIp, bundledA2600Rom.fileName, data.buffer, updateRomProgress);
@@ -10159,7 +10489,8 @@ function initFlashPage(doc = document) {
       setStatus(els.statusRom, "Papilio Splash ROM uploaded and inserted. A FAT-formatted SD card is required.", "ok");
     } catch (err2) {
       log(`ROM upload failed: ${err2.message}`);
-      setStatus(els.statusRom, `ROM upload failed: ${err2.message}`, "error");
+      const hint = /HTTP 5\d\d|f_open|SD/i.test(err2.message) ? " Make sure a FAT-formatted microSD card is inserted in the board." : "";
+      setStatus(els.statusRom, `ROM upload failed: ${err2.message}.${hint}`, "error");
     } finally {
       updateA2600Enabled();
     }

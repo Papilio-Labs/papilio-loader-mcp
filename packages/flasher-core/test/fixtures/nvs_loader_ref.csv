@@ -1,0 +1,6 @@
+key,type,encoding,value
+wifi_cfg,namespace,,
+ssid,data,string,MyNetwork-With-A-Long-Name-32ch
+pass,data,string,s3cret pass!
+loader,namespace,,
+last_slot,data,u8,0

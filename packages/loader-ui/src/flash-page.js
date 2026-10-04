@@ -4,7 +4,7 @@
 import {
   SerialLineReader,
   flashEsp32,
-  sendWifiCredentials,
+  provisionBoardOverUsb,
   watchProvisioningLine,
   flashFpgaOverSerial,
   resumeAppOverSerial,
@@ -18,6 +18,8 @@ import {
   recoverIntoLoader,
   createBrowserXhrPoster,
   detectBinaryImageType,
+  seedBootSelectionInMergedImage,
+  bootCompanionOverUsb,
 } from "@papilio-loader/flasher-core";
 import { makeLogger, setStatus } from "./dom.js";
 
@@ -108,6 +110,7 @@ export function initFlashPage(doc = document) {
   let esp32ImageType = null;
   let fpgaImageType = null;
   let deviceIp = null;
+  let ipSeq = 0;
   let awaitingReconnect = false;
   // Bundled firmware manifest (same-origin firmware/manifest.json, written by
   // scripts/fetch-latest-firmware.mjs during the deploy build). Lets Step 1
@@ -269,27 +272,93 @@ export function initFlashPage(doc = document) {
 
   async function closeSerialSession() {
     if (reader?.isRunning) await reader.stop();
-    if (serialPort?.close) {
+    if (!serialPort?.close) return;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (!serialPort.readable && !serialPort.writable) return;
       try {
         await serialPort.close();
+        return;
       } catch {
-        // The port may already be closed after USB re-enumeration.
+        // Streams can stay locked briefly after cancel; retry before esptool opens the port.
+        await sleep(200);
       }
     }
   }
 
   async function resumeAppAfterFpga(ip) {
-    if (ip) {
-      try {
-        const responseText = await resumeEsp32Ota(ip);
-        log(responseText);
-      } catch (err) {
-        log(`Resume response race (likely harmless): ${err.message}`);
-      }
-      return;
+    if (!(await returnToCompanion(ip))) {
+      log(`FPGA-Companion did not come back${ip ? ` at ${ip}` : ""}.`);
+    }
+  }
+
+  // FPGA-Companion can briefly answer on WiFi and then crash, so require it
+  // to still be up a few seconds later.
+  async function companionIsStable(ip) {
+    if ((await probeRole(ip, 2000)) !== "app") return false;
+    await sleep(6000);
+    return (await probeRole(ip, 2000)) === "app";
+  }
+
+  async function bootCompanionViaUsb() {
+    await closeSerialSession();
+    const previousPort = serialPort;
+    awaitingReconnect = true;
+    await bootCompanionOverUsb(serialPort, { onLog: log });
+    await waitForUsbPort(previousPort);
+    await startSerialListenerWithRetry();
+  }
+
+  // Bring the board back to FPGA-Companion. Over USB (when connected) this
+  // selects ota_0 and does a full watchdog reset — the bootloader's own
+  // /resume uses a CPU-only restart that FPGA-Companion v2.0.0 can crash on
+  // right after an FPGA write, which rollback turns into a return to the
+  // loader. Without USB, fall back to repeated POST /resume over WiFi.
+  async function returnToCompanion(ip, timeoutMs = 60000) {
+    if (ip && (await companionIsStable(ip))) {
+      log(`FPGA-Companion is running at ${ip}.`);
+      return true;
     }
 
-    await resumeAppOverSerial(serialPort, reader);
+    if (serialPort) {
+      log("Restarting into FPGA-Companion over USB…");
+      await bootCompanionViaUsb();
+      if (!ip) return true;
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        if (await companionIsStable(ip)) {
+          log(`FPGA-Companion is running at ${ip}.`);
+          return true;
+        }
+        await sleep(1000);
+      }
+      return false;
+    }
+
+    if (!ip) return false;
+    const started = Date.now();
+    let lastResume = 0;
+    while (Date.now() - started < timeoutMs) {
+      const role = await probeRole(ip, 2000);
+      if (role === "app" && (await companionIsStable(ip))) {
+        log(`FPGA-Companion is running at ${ip}.`);
+        return true;
+      }
+      if (role === "loader" && Date.now() - lastResume > 5000) {
+        lastResume = Date.now();
+        try {
+          log(await resumeEsp32Ota(ip));
+        } catch (err) {
+          if (/no valid app image/i.test(err.message)) {
+            throw new Error(
+              "the bootloader does not know which slot holds FPGA-Companion. Enter your WiFi details and click Send to Board in Step 2 (with USB connected) to fix the boot selection, then retry."
+            );
+          }
+          log(`Resume request: ${err.message}; checking again…`);
+        }
+      }
+      await sleep(1000);
+    }
+    return false;
   }
 
   async function probeRole(ip, timeoutMs = 2000) {
@@ -377,8 +446,18 @@ export function initFlashPage(doc = document) {
     return null;
   }
 
+  async function waitForNewIp(seqBefore, timeoutMs) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (ipSeq !== seqBefore) return true;
+      await sleep(250);
+    }
+    return false;
+  }
+
   function setDeviceIp(ip) {
     deviceIp = ip;
+    ipSeq += 1;
     els.deviceIp.textContent = ip;
     setStatus(els.statusWifi, `Board connected — IP ${ip}`, "ok");
     updateFlashFpgaEnabled();
@@ -486,6 +565,11 @@ export function initFlashPage(doc = document) {
       // esptool-js must own the Web Serial port exclusively while flashing.
       // A log reader left open here causes the browser's "port is already open"
       // error before esptool can enter the ROM bootloader.
+      const seeded = seedBootSelectionInMergedImage(data);
+      if (seeded) {
+        data = seeded;
+        log("Seeded otadata (boot FPGA-Companion in ota_0) and loader last_slot=0 into the image.");
+      }
       await closeSerialSession();
       await flashEsp32(serialPort, data, {
         onLog: log,
@@ -522,11 +606,34 @@ export function initFlashPage(doc = document) {
       setStatus(els.statusWifi, "Enter a WiFi network name first.", "error");
       return;
     }
+    if (new TextEncoder().encode(ssid).length > 32 || new TextEncoder().encode(pass).length > 63) {
+      setStatus(els.statusWifi, "WiFi name must be at most 32 bytes and password at most 63.", "error");
+      return;
+    }
 
+    els.btnSendWifi.disabled = true;
     try {
-      await startSerialListenerWithRetry(10, 750);
-      await sendWifiCredentials(serialPort, ssid, pass);
-      setStatus(els.statusWifi, "Credentials sent, waiting for board to confirm…");
+      // Neither firmware listens for serial WiFi commands, so write the
+      // settings (and the boot selection for FPGA-Companion) into flash.
+      if (!serialPort) throw new Error("No USB port selected.");
+      // A port from before the Step 1 reset can't be reopened; swap in the re-enumerated one.
+      if (!reader?.isRunning) await startSerialListenerWithRetry(10, 750);
+      await closeSerialSession();
+      const previousPort = serialPort;
+      const ipSeqBefore = ipSeq;
+      setStatus(els.statusWifi, "Writing WiFi settings to the board…");
+      await provisionBoardOverUsb(serialPort, { ssid, password: pass, onLog: log });
+      awaitingReconnect = true;
+      setStatus(els.statusWifi, "Settings saved. Board is restarting into FPGA-Companion and joining WiFi…");
+      await waitForUsbPort(previousPort);
+      await startSerialListenerWithRetry();
+      if (!(await waitForNewIp(ipSeqBefore, 30000))) {
+        setStatus(
+          els.statusWifi,
+          "Settings saved, but the board hasn't reported an IP yet. Check the WiFi name/password (2.4 GHz only), or click Find My IP.",
+          "error"
+        );
+      }
     } catch (err) {
       log(`Send WiFi credentials failed: ${err.message}`);
       setStatus(
@@ -534,6 +641,8 @@ export function initFlashPage(doc = document) {
         `Send failed: ${err.message} Unplug and replug the board's USB cable, click Find My IP to pick its port again, then click Send to Board.`,
         "error"
       );
+    } finally {
+      els.btnSendWifi.disabled = false;
     }
   });
 
@@ -674,7 +783,9 @@ export function initFlashPage(doc = document) {
         await flashFpgaOverSerial(serialPort, reader, SERIAL_FPGA_TARGET["/fpga-update"], data, updateFpgaProgress);
       }
       setStatus(els.statusA2600, "Core written — restarting FPGA-Companion…");
-      await resumeAppAfterFpga(ip);
+      if (!(await returnToCompanion(ip))) {
+        throw new Error(`the core was written, but the board did not return to FPGA-Companion${ip ? ` at ${ip}` : ""}. Step 4 will retry the switch.`);
+      }
       setStatus(els.statusA2600, `A2600 core programmed successfully via ${ip ? "WiFi" : "USB"}.`, "ok");
     } catch (err) {
       log(`A2600 core flash failed: ${err.message}`);
@@ -690,18 +801,11 @@ export function initFlashPage(doc = document) {
     setStatus(els.statusRom, "Downloading the Papilio Splash demo ROM…");
     try {
       const data = await fetchBundledArtifact(bundledA2600Rom);
-      // /rom-load lives in FPGA-Companion, not the bootloader.
-      let role = await probeRole(deviceIp, 3000);
-      if (role === "loader") {
-        setStatus(els.statusRom, "Returning the board to FPGA-Companion…");
-        await resumeAppAfterFpga(deviceIp);
-        role = null;
-      }
-      if (role !== "app") {
-        setStatus(els.statusRom, "Waiting for FPGA-Companion on WiFi…");
-        if (!(await waitForRoleOverWifi(deviceIp, "app", 30000))) {
-          throw new Error(`FPGA-Companion did not answer at ${deviceIp}. Check the board is on WiFi, then retry.`);
-        }
+      // /rom-load lives in FPGA-Companion, not the bootloader — always make
+      // sure the board is back in the user app first.
+      setStatus(els.statusRom, "Making sure the board is running FPGA-Companion…");
+      if (!(await returnToCompanion(deviceIp))) {
+        throw new Error(`FPGA-Companion did not answer at ${deviceIp}. Check the board is on WiFi, then retry.`);
       }
       setStatus(els.statusRom, "Uploading the Papilio Splash demo ROM…");
       const responseText = await uploadRomOta(otaPoster, deviceIp, bundledA2600Rom.fileName, data.buffer, updateRomProgress);
@@ -709,7 +813,8 @@ export function initFlashPage(doc = document) {
       setStatus(els.statusRom, "Papilio Splash ROM uploaded and inserted. A FAT-formatted SD card is required.", "ok");
     } catch (err) {
       log(`ROM upload failed: ${err.message}`);
-      setStatus(els.statusRom, `ROM upload failed: ${err.message}`, "error");
+      const hint = /HTTP 5\d\d|f_open|SD/i.test(err.message) ? " Make sure a FAT-formatted microSD card is inserted in the board." : "";
+      setStatus(els.statusRom, `ROM upload failed: ${err.message}.${hint}`, "error");
     } finally {
       updateA2600Enabled();
     }

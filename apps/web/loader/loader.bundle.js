@@ -2178,6 +2178,7 @@ var SerialLineReader = class {
   reader = null;
   loopDone = Promise.resolve();
   resolveLoopDone = null;
+  pipeDone = Promise.resolve();
   constructor(port, baudRate = 115200) {
     this.port = port;
     this.baudRate = baudRate;
@@ -2212,7 +2213,7 @@ var SerialLineReader = class {
       this.resolveLoopDone = resolve;
     });
     const decoder = new TextDecoderStream();
-    this.port.readable.pipeTo(decoder.writable).catch(() => {
+    this.pipeDone = this.port.readable.pipeTo(decoder.writable).catch(() => {
     });
     const reader = decoder.readable.getReader();
     this.reader = reader;
@@ -2254,6 +2255,7 @@ var SerialLineReader = class {
     this.reader?.cancel().catch(() => {
     });
     await this.loopDone;
+    await Promise.race([this.pipeDone, new Promise((resolve) => setTimeout(resolve, 1e3))]);
   }
   handleLine(line) {
     for (const listener of this.lineListeners)
@@ -9427,6 +9429,18 @@ any other hardware connected to IOs.`);
 // ../../node_modules/esptool-js/lib/index.js
 init_rom();
 
+// ../../packages/flasher-core/dist/nvs-image.js
+var CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++)
+      c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
 // ../../packages/flasher-core/dist/esp32.js
 async function watchdogResetEsp32S3(loader) {
   const RTC_CNTL_WDTCONFIG0_REG = 1610645656;
@@ -9721,7 +9735,7 @@ function initLoaderPage(doc = document, win = window) {
     appVersion: doc.getElementById("app-version")
   };
   if (els.appVersion) {
-    els.appVersion.textContent = `v${true ? "0.4.3" : "dev"}`;
+    els.appVersion.textContent = `v${true ? "0.4.7" : "dev"}`;
   }
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();

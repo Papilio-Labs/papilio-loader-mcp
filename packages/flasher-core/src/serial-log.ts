@@ -27,6 +27,7 @@ export class SerialLineReader {
   private reader: ReadableStreamDefaultReader<string> | null = null;
   private loopDone: Promise<void> = Promise.resolve();
   private resolveLoopDone: (() => void) | null = null;
+  private pipeDone: Promise<void> = Promise.resolve();
 
   constructor(port: SerialLike, baudRate = 115200) {
     this.port = port;
@@ -67,7 +68,7 @@ export class SerialLineReader {
       this.resolveLoopDone = resolve;
     });
     const decoder = new TextDecoderStream();
-    this.port.readable
+    this.pipeDone = this.port.readable
       .pipeTo(decoder.writable as WritableStream<Uint8Array>)
       .catch(() => {});
     const reader = decoder.readable.getReader();
@@ -116,6 +117,9 @@ export class SerialLineReader {
     // changes. Cancel it so esptool-js can open the same native USB port.
     this.reader?.cancel().catch(() => {});
     await this.loopDone;
+    // The pipe from port.readable keeps that stream locked until the cancel
+    // propagates; port.close() fails (and the port stays open) until then.
+    await Promise.race([this.pipeDone, new Promise((resolve) => setTimeout(resolve, 1000))]);
   }
 
   private handleLine(line: string): void {

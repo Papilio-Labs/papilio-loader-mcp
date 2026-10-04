@@ -4,6 +4,10 @@
 // the original static pages used — removes that CDN single-point-of-failure.
 import { ESPLoader, Transport } from "esptool-js";
 import type { SerialLike } from "./transport.js";
+import { buildBoardProvisioningRegions, buildOtadataSelectingSlot, parsePartitionTable, type BoardProvisioningOptions } from "./nvs-image.js";
+
+const PARTITION_TABLE_OFFSET = 0x8000;
+const PARTITION_TABLE_SIZE = 0xc00;
 
 export interface Esp32FlashOptions {
   onLog?(message: string): void;
@@ -71,6 +75,118 @@ export async function resetEsp32ForIp(port: SerialLike, onLog?: (message: string
 
 export interface Esp32FlashResult {
   chipName: string;
+}
+
+export interface Esp32ProvisionOptions extends Esp32FlashOptions, BoardProvisioningOptions {}
+
+// Writes WiFi credentials + boot selection straight into flash (see
+// nvs-image.ts for why), then watchdog-resets so the board boots
+// FPGA-Companion and joins WiFi. Offsets come from the board's own partition
+// table, so a custom layout is handled as long as the labels match.
+export async function provisionBoardOverUsb(port: SerialLike, options: Esp32ProvisionOptions): Promise<Esp32FlashResult> {
+  const transport = new Transport(port as unknown as ConstructorParameters<typeof Transport>[0], true);
+  const loader = new ESPLoader({
+    transport,
+    baudrate: 115200,
+    terminal: {
+      clean: () => {},
+      writeLine: (msg: string) => options.onLog?.(msg),
+      write: (msg: string) => options.onLog?.(msg),
+    },
+  });
+
+  try {
+    const chipName = await loader.main();
+    options.onLog?.(`Connected to ${chipName}. Reading partition table...`);
+
+    const partitions = parsePartitionTable(await loader.readFlash(PARTITION_TABLE_OFFSET, PARTITION_TABLE_SIZE));
+    const ota0 = partitions.find((p) => p.type === 0x00 && p.subtype === 0x10);
+    if (!ota0) throw new Error("No ota_0 partition found — flash the Step 1 firmware first.");
+    const appMagic = await loader.readFlash(ota0.offset, 1);
+    if (appMagic[0] !== 0xe9) throw new Error("FPGA-Companion is not installed in ota_0 — flash the Step 1 firmware first.");
+
+    const regions = buildBoardProvisioningRegions(partitions, options);
+    options.onLog?.(`Writing WiFi settings and boot selection (${regions.map((r) => `0x${r.address.toString(16)}`).join(", ")})...`);
+    await loader.writeFlash({
+      fileArray: regions,
+      flashMode: "keep",
+      flashFreq: "keep",
+      flashSize: "keep",
+      eraseAll: false,
+      compress: true,
+      reportProgress: (_fileIndex: number, written: number, total: number) => {
+        options.onProgress?.(written, total);
+      },
+    });
+
+    if (loader.chip && loader.chip.CHIP_NAME === "ESP32-S3") {
+      options.onLog?.("Restarting into FPGA-Companion via RTC watchdog...");
+      await watchdogResetEsp32S3(loader);
+    } else {
+      await loader.after("hard_reset");
+    }
+    return { chipName };
+  } finally {
+    try {
+      await transport.disconnect();
+    } catch {
+      // already closed/never opened — ignore
+    }
+  }
+}
+
+// Boots FPGA-Companion (ota_0) from any state — including the Papilio ESP
+// Bootloader — by selecting ota_0 in otadata over USB and restarting with the
+// RTC watchdog. Unlike the bootloader's /resume (esp_restart = CPU-only reset),
+// the watchdog fully resets the chip's peripherals: FPGA-Companion v2.0.0
+// crashes in its SPI/IRQ init when booted via esp_restart right after the
+// bootloader has driven the FPGA, and bootloader rollback then parks the board
+// back in the loader.
+export async function bootCompanionOverUsb(port: SerialLike, options: { onLog?: (msg: string) => void } = {}): Promise<Esp32FlashResult> {
+  const transport = new Transport(port as unknown as ConstructorParameters<typeof Transport>[0], true);
+  const loader = new ESPLoader({
+    transport,
+    baudrate: 115200,
+    terminal: {
+      clean: () => {},
+      writeLine: (msg: string) => options.onLog?.(msg),
+      write: (msg: string) => options.onLog?.(msg),
+    },
+  });
+
+  try {
+    const chipName = await loader.main();
+    const partitions = parsePartitionTable(await loader.readFlash(PARTITION_TABLE_OFFSET, PARTITION_TABLE_SIZE));
+    const ota0 = partitions.find((p) => p.type === 0x00 && p.subtype === 0x10);
+    const otadata = partitions.find((p) => p.type === 0x01 && p.subtype === 0x00);
+    if (!ota0 || !otadata) throw new Error("No ota_0/otadata partition found — flash the Step 1 firmware first.");
+    const appMagic = await loader.readFlash(ota0.offset, 1);
+    if (appMagic[0] !== 0xe9) throw new Error("FPGA-Companion is not installed in ota_0 — flash the Step 1 firmware first.");
+
+    options.onLog?.("Selecting FPGA-Companion (ota_0) as the boot app...");
+    await loader.writeFlash({
+      fileArray: [{ address: otadata.offset, data: buildOtadataSelectingSlot(0, otadata.size) }],
+      flashMode: "keep",
+      flashFreq: "keep",
+      flashSize: "keep",
+      eraseAll: false,
+      compress: true,
+    });
+
+    if (loader.chip && loader.chip.CHIP_NAME === "ESP32-S3") {
+      options.onLog?.("Restarting into FPGA-Companion via RTC watchdog...");
+      await watchdogResetEsp32S3(loader);
+    } else {
+      await loader.after("hard_reset");
+    }
+    return { chipName };
+  } finally {
+    try {
+      await transport.disconnect();
+    } catch {
+      // already closed/never opened — ignore
+    }
+  }
 }
 
 // Flashes a merged single-file image (bootloader + partition table + app,
