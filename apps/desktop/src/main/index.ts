@@ -64,6 +64,7 @@ function resolveExternalUrl(targetUrl: string): string | null {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let wifiLogWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let mcpServerHandle: HttpMcpServerHandle | null = null;
@@ -119,6 +120,35 @@ function createWindow(): void {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+}
+
+async function showWifiLogWindow(): Promise<void> {
+  if (wifiLogWindow) {
+    wifiLogWindow.show();
+    wifiLogWindow.focus();
+    return;
+  }
+  const window = new BrowserWindow({
+    width: 1000,
+    height: 680,
+    title: "Papilio Loader - WiFi Log",
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  wifiLogWindow = window;
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  window.on("closed", () => { wifiLogWindow = null; });
+  try {
+    await window.loadFile(path.join(WEB_ROOT, "wifi-log/index.html"));
+  } catch (err) {
+    window.destroy();
+    throw err;
+  }
 }
 
 // --- WebSerial support: Electron has no built-in device chooser -----------
@@ -198,8 +228,8 @@ function wireIpc(): void {
   });
 
   ipcMain.handle("papilio:saved-files-list", async (_event, deviceType?: string) => savedFiles.list(deviceType));
-  ipcMain.handle("papilio:saved-files-add", async (_event, originalFilename: string, deviceType: string, description: string, data: Buffer) =>
-    savedFiles.add(originalFilename, deviceType, description, data)
+  ipcMain.handle("papilio:saved-files-add", async (_event, originalFilename: string, deviceType: string, description: string, data: Uint8Array) =>
+    savedFiles.add(originalFilename, deviceType, description, Buffer.from(data))
   );
   ipcMain.handle("papilio:saved-files-read", async (_event, id: string) => savedFiles.readFile(id));
   ipcMain.handle("papilio:saved-files-delete", async (_event, id: string) => savedFiles.delete(id));
@@ -208,15 +238,29 @@ function wireIpc(): void {
     savedFiles.updateDescription(id, description)
   );
   ipcMain.handle("papilio:saved-files-export-zip", async () => savedFiles.exportZip());
-  ipcMain.handle("papilio:saved-files-import-zip", async (_event, data: Buffer) => savedFiles.importZip(data));
+  ipcMain.handle("papilio:saved-files-import-zip", async (_event, data: Uint8Array) => savedFiles.importZip(Buffer.from(data)));
 
+  ipcMain.handle("papilio:wifi-log-open-window", showWifiLogWindow);
+  const wifiSubscriptions = new Map<number, () => void>();
   ipcMain.handle("papilio:wifi-log-subscribe", (event) => {
     const webContents = event.sender;
+    wifiSubscriptions.get(webContents.id)?.();
     const unsubscribe = wifiLogManager.subscribe((line) => {
       if (!webContents.isDestroyed()) webContents.send("papilio:wifi-log-line", line);
+    }, (status) => {
+      if (!webContents.isDestroyed()) webContents.send("papilio:wifi-log-status", status);
     });
-    webContents.once("destroyed", unsubscribe);
+    const cleanup = () => {
+      unsubscribe();
+      wifiSubscriptions.delete(webContents.id);
+      webContents.removeListener("destroyed", cleanup);
+    };
+    wifiSubscriptions.set(webContents.id, cleanup);
+    webContents.once("destroyed", cleanup);
     return true;
+  });
+  ipcMain.handle("papilio:wifi-log-unsubscribe", (event) => {
+    wifiSubscriptions.get(event.sender.id)?.();
   });
 }
 

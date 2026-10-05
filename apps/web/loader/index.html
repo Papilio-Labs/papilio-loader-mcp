@@ -95,6 +95,12 @@
         <p class="card-note">
           Programs the FPGA's persistent SPI Flash automatically.
         </p>
+        <div id="fpga-save-fields" class="save-file-fields" hidden>
+          <label><input type="checkbox" id="fpga-save"> Save this file to library before programming</label>
+          <input id="fpga-save-name" type="text" placeholder="Saved filename (optional)" aria-label="FPGA saved filename">
+          <input id="fpga-save-description" type="text" placeholder="Description (optional)" aria-label="FPGA file description">
+          <button id="btn-save-fpga" class="btn btn-outline">Save to Library</button>
+        </div>
 
         <button id="btn-flash-fpga" class="btn btn-primary" disabled>⚡ Program FPGA</button>
         <div class="progress" id="progress-fpga" hidden>
@@ -114,6 +120,12 @@
         <p class="card-note">
           Detects app-only or merged firmware automatically, then programs it using the safe path.
         </p>
+        <div id="esp32-save-fields" class="save-file-fields" hidden>
+          <label><input type="checkbox" id="esp32-save"> Save this file to library before programming</label>
+          <input id="esp32-save-name" type="text" placeholder="Saved filename (optional)" aria-label="ESP32 saved filename">
+          <input id="esp32-save-description" type="text" placeholder="Description (optional)" aria-label="ESP32 file description">
+          <button id="btn-save-esp32" class="btn btn-outline">Save to Library</button>
+        </div>
         <button id="btn-flash-esp32" class="btn btn-primary" disabled>⚡ Program ESP32</button>
         <div class="progress" id="progress-esp32" hidden>
           <div class="progress-bar" style="width:0%"></div>
@@ -122,6 +134,38 @@
       </section>
 
     </div>
+
+    <details class="status-log-section advanced-section" id="saved-files-panel" hidden>
+      <summary>Saved Files Library</summary>
+      <div class="advanced-section-body">
+        <div class="flash-row">
+          <label for="saved-files-filter">Show</label>
+          <select id="saved-files-filter">
+            <option value="">All Files</option>
+            <option value="fpga">FPGA</option>
+            <option value="esp32">ESP32</option>
+          </select>
+          <button id="btn-export-files" class="btn btn-outline">Export ZIP</button>
+          <label class="file-picker">
+            <input id="import-files" type="file" accept=".zip">
+            <span>Import ZIP</span>
+          </label>
+        </div>
+        <p id="saved-files-status" class="flash-status" role="status"></p>
+        <div id="saved-files-list"></div>
+      </div>
+    </details>
+
+    <dialog id="saved-file-edit" class="saved-file-dialog">
+      <form method="dialog">
+        <label id="saved-file-edit-label" for="saved-file-edit-value">Edit file</label>
+        <input id="saved-file-edit-value" type="text">
+        <div class="flash-row">
+          <button value="cancel" class="btn btn-outline">Cancel</button>
+          <button value="save" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
 
     <details class="status-log-section advanced-section" id="loader-board-status" open>
       <summary>Board Status</summary>
@@ -200,6 +244,6 @@
     <p class="loader-version" id="app-version"></p>
   </main>
 
-  <script type="module" src="loader.bundle.js?v=0.4.0"></script>
+  <script type="module" src="loader.bundle.js?v=0.4.8"></script>
 </body>
 </html>

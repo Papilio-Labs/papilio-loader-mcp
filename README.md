@@ -4,6 +4,14 @@ An MCP (Model Context Protocol) server for loading FPGA bit files and ESP32 firm
 
 ## 🎉 NEW: Desktop Application Available!
 
+The Electron desktop loader restores the **Saved Files Library** (save/load,
+rename, descriptions, delete, ZIP backup/import including Python exports) and
+the **WiFi Log pop-out terminal** (Stop/Reconnect/Clear, auto-scroll, ANSI colors).
+These are desktop-only extras in the shared UI; the hosted website still uses
+local file selection and USB logs. See
+[Saved Files](documentation/SAVED_FILES_FEATURE.md#electron-desktop-app) and
+[Desktop Features](documentation/DESKTOP_APP.md#electron-loader).
+
 Papilio Loader is now available as a **desktop application** with system tray integration! Perfect for end users who want a simple, easy-to-use interface.
 
 **[👉 Download Desktop App Installer](https://github.com/Papilio-Labs/papilio-loader-mcp/releases)**

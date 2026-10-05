@@ -4,6 +4,29 @@ The Papilio Loader is now available as a desktop application with system tray in
 
 ## Features
 
+### Electron loader
+
+The Electron app uses the same loader page as the website, with additional
+desktop-only features:
+
+- **Saved Files Library**: save without flashing, optionally save before
+  programming, load, filter, rename, edit descriptions, delete, and ZIP
+  import/export. Python-loader ZIP exports can be imported too.
+  See [Saved Files Library](SAVED_FILES_FEATURE.md#electron-desktop-app).
+- **WiFi Log Monitor (UDP 7777)**: automatically listens for board logs.
+  **Pop Out** opens a separate resizable terminal that fills the window,
+  including when maximized; clicking it again focuses
+  the existing window. Both views have Stop, Reconnect, Clear, auto-scroll,
+  a bounded line count, and ANSI colors. Each view controls its own subscription:
+  stopping or closing one does not stop the other. Closing the main app window
+  hides it to the tray, so the pop-out can remain open. Quit closes both.
+- Listener errors are displayed, with Windows Firewall guidance when access
+  is denied. Only one UDP socket is used; it closes when all monitors stop.
+
+The website cannot receive raw UDP traffic or access the desktop file store.
+Its USB log and flashing workflow are unchanged. The installation details below
+refer to the legacy Python desktop distribution.
+
 - 🖥️ **System Tray Integration**: Runs quietly in your system tray
 - 🌐 **Web Interface**: Full-featured web interface accessible from your browser
 - 🚀 **Auto-Start**: Optional startup with Windows

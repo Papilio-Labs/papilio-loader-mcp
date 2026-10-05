@@ -30,6 +30,8 @@ import {
   detectBinaryImageType,
 } from "@papilio-loader/flasher-core";
 import { makeLogger, setStatus } from "./dom.js";
+import { initSavedFiles } from "./saved-files.js";
+import { initWifiLogMonitor } from "./wifi-log.js";
 
 export function initLoaderPage(doc = document, win = window) {
   const capabilities = detectCapabilities(win);
@@ -91,6 +93,19 @@ export function initLoaderPage(doc = document, win = window) {
 
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
+  const library = capabilities.savedFilesFilesystem
+    ? initSavedFiles(doc, win, validateSelectedFile)
+    : { saveBeforeProgramming: async () => {} };
+
+  if (capabilities.wifiLogUdp && win.papilioDesktop?.subscribeWifiLog && els.wifiLogPanel) {
+    initWifiLogMonitor(els.wifiLogPanel, win, {
+      onLine: (line) => {
+        if (!deviceIp) watchProvisioningLine(line, { onIp: (ip) => setDeviceIp(ip) });
+      },
+    });
+  } else {
+    els.wifiLogNote?.removeAttribute("hidden");
+  }
 
   let serialPort = null;
   let reader = null;
@@ -852,6 +867,7 @@ export function initLoaderPage(doc = document, win = window) {
         setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
         return;
       }
+      await library.saveBeforeProgramming("fpga", file);
       const ip = await prepareForProgramming(els.statusFpga, transportPreference);
 
       if (ip) {
@@ -917,6 +933,7 @@ export function initLoaderPage(doc = document, win = window) {
     els.progressEsp32.hidden = false;
 
     try {
+      await library.saveBeforeProgramming("esp32", file);
       if (isMergedEsp32Image(data)) {
         await ensureUsbPort();
         await stopSerialListener();
@@ -997,20 +1014,6 @@ export function initLoaderPage(doc = document, win = window) {
         els.btnLanScan.disabled = false;
       }
     });
-  }
-
-  if (capabilities.wifiLogUdp && win.papilioDesktop?.subscribeWifiLog && els.wifiLogPanel) {
-    els.wifiLogPanel.removeAttribute("hidden");
-    const wifiLogOutput = doc.getElementById("wifi-log-output");
-    const wifiLog = wifiLogOutput ? makeLogger(wifiLogOutput) : log;
-    win.papilioDesktop.subscribeWifiLog((line) => {
-      wifiLog(line);
-      // The board's periodic WiFi/UDP status log reports its IP too — if
-      // we don't already have one cached, this saves a USB reset entirely.
-      if (!deviceIp) watchProvisioningLine(line, { onIp: (ip) => setDeviceIp(ip) });
-    });
-  } else {
-    els.wifiLogNote?.removeAttribute("hidden");
   }
 
   updateFlashFpgaEnabled();

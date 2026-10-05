@@ -7,7 +7,8 @@
   "exports": {
     "./flash-page.js": "./src/flash-page.js",
     "./loader-page.js": "./src/loader-page.js",
-    "./dom.js": "./src/dom.js"
+    "./dom.js": "./src/dom.js",
+    "./wifi-log.js": "./src/wifi-log.js"
   },
   "dependencies": {
     "@papilio-loader/flasher-core": "*"

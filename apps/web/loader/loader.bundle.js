@@ -9688,6 +9688,292 @@ function setStatus(el, message, kind) {
   if (kind) el.classList.add(kind === "error" ? "is-error" : "is-ok");
 }
 
+// ../../packages/loader-ui/src/saved-files.js
+function binFilename(name) {
+  return /\.bin$/i.test(name) ? name : `${name}.bin`;
+}
+function initSavedFiles(doc, win, validateFile) {
+  const api = win.papilioDesktop?.savedFiles;
+  if (!api) return { saveBeforeProgramming: async () => {
+  } };
+  const panel = doc.getElementById("saved-files-panel");
+  const list = doc.getElementById("saved-files-list");
+  const status = doc.getElementById("saved-files-status");
+  const filter = doc.getElementById("saved-files-filter");
+  const dialog = doc.getElementById("saved-file-edit");
+  let generation = 0;
+  panel.hidden = false;
+  async function action(operation) {
+    try {
+      await operation();
+    } catch (err2) {
+      setStatus(status, err2.message, "error");
+    }
+  }
+  async function refresh() {
+    const current = ++generation;
+    const records = await api.list(filter.value || void 0);
+    if (current !== generation) return;
+    list.replaceChildren();
+    if (!records.length) {
+      list.textContent = "No saved files yet. Select a file above and save it to your library.";
+    }
+    for (const record of records) {
+      const card = doc.createElement("div");
+      card.className = "saved-file-card";
+      const name = doc.createElement("strong");
+      name.textContent = record.originalFilename;
+      const info = doc.createElement("p");
+      info.className = "card-note";
+      info.textContent = `${record.deviceType.toUpperCase()} | ${(record.fileSize / 1024).toFixed(1)} KB | ${new Date(record.createdAt).toLocaleString()}`;
+      const description = doc.createElement("p");
+      description.textContent = record.description;
+      const controls = doc.createElement("div");
+      controls.className = "flash-row";
+      const button = (label, operation) => {
+        const btn = doc.createElement("button");
+        btn.className = "btn btn-outline";
+        btn.textContent = label;
+        btn.addEventListener("click", () => action(async () => {
+          btn.disabled = true;
+          try {
+            await operation();
+          } finally {
+            btn.disabled = false;
+          }
+        }));
+        controls.appendChild(btn);
+      };
+      button("Load", async () => {
+        const saved = await api.read(record.id);
+        if (!saved) throw new Error("This saved file no longer exists.");
+        const file = new win.File([saved.data], binFilename(saved.record.originalFilename), { type: "application/octet-stream" });
+        const input = doc.getElementById(`${record.deviceType}-file`);
+        const transfer = new win.DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+        input.dispatchEvent(new win.Event("change"));
+        doc.getElementById(`${record.deviceType}-save`).checked = false;
+        doc.getElementById(`${record.deviceType}-save-name`).value = record.originalFilename;
+        doc.getElementById(`${record.deviceType}-save-description`).value = record.description;
+        setStatus(status, `Loaded ${record.originalFilename} into the ${record.deviceType.toUpperCase()} form.`, "ok");
+      });
+      const edit = async (label, value, update) => {
+        doc.getElementById("saved-file-edit-label").textContent = label;
+        const input = doc.getElementById("saved-file-edit-value");
+        input.value = value;
+        dialog.returnValue = "";
+        const result = new Promise((resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue), { once: true }));
+        dialog.showModal();
+        if (await result !== "save") return;
+        if (!await update(input.value)) throw new Error("This saved file no longer exists.");
+        await refresh();
+        setStatus(status, "Saved file updated.", "ok");
+      };
+      button("Rename", () => edit("Filename", record.originalFilename, (value) => {
+        if (!value.trim()) throw new Error("Enter a filename.");
+        return api.rename(record.id, binFilename(value.trim()));
+      }));
+      button("Edit Description", () => edit("Description", record.description, (value) => api.describe(record.id, value)));
+      button("Delete", async () => {
+        if (!win.confirm(`Delete "${record.originalFilename}" from the library?`)) return;
+        if (!await api.delete(record.id)) throw new Error("This saved file no longer exists.");
+        await refresh();
+        setStatus(status, "Saved file deleted.", "ok");
+      });
+      card.append(name, info, description, controls);
+      list.appendChild(card);
+    }
+  }
+  async function save(type, file = doc.getElementById(`${type}-file`).files[0]) {
+    if (!file) throw new Error("Select a file to save first.");
+    if (await validateFile(file, type) !== type) throw new Error(`Select a valid ${type.toUpperCase()} .bin file.`);
+    const name = binFilename(doc.getElementById(`${type}-save-name`).value.trim() || file.name);
+    const description = doc.getElementById(`${type}-save-description`).value;
+    await api.add(name, type, description, await file.arrayBuffer());
+    doc.getElementById(`${type}-save`).checked = false;
+    await refresh();
+    setStatus(status, `Saved ${name} to the library.`, "ok");
+  }
+  for (const type of ["fpga", "esp32"]) {
+    doc.getElementById(`${type}-save-fields`).hidden = false;
+    const btn = doc.getElementById(`btn-save-${type}`);
+    btn.addEventListener("click", () => action(async () => {
+      btn.disabled = true;
+      try {
+        await save(type);
+      } finally {
+        btn.disabled = false;
+      }
+    }));
+  }
+  filter.addEventListener("change", () => action(refresh));
+  const exportButton = doc.getElementById("btn-export-files");
+  exportButton.addEventListener("click", () => action(async () => {
+    exportButton.disabled = true;
+    try {
+      const data = await api.exportZip();
+      const url = win.URL.createObjectURL(new win.Blob([data], { type: "application/zip" }));
+      const link = doc.createElement("a");
+      link.href = url;
+      link.download = "papilio_saved_files.zip";
+      doc.body.appendChild(link);
+      link.click();
+      link.remove();
+      win.setTimeout(() => win.URL.revokeObjectURL(url), 1e3);
+      setStatus(status, "Library exported.", "ok");
+    } finally {
+      exportButton.disabled = false;
+    }
+  }));
+  const importInput = doc.getElementById("import-files");
+  importInput.addEventListener("change", () => action(async () => {
+    const file = importInput.files[0];
+    if (!file) return;
+    importInput.disabled = true;
+    try {
+      const count = await api.importZip(await file.arrayBuffer());
+      await refresh();
+      setStatus(status, `Imported ${count} file(s).`, "ok");
+    } finally {
+      importInput.disabled = false;
+      importInput.value = "";
+    }
+  }));
+  void action(refresh);
+  return {
+    saveBeforeProgramming: async (type, file) => {
+      if (doc.getElementById(`${type}-save`).checked) await save(type, file);
+    }
+  };
+}
+
+// ../../packages/loader-ui/src/wifi-log.js
+var foregrounds = ["#4e4e4e", "#f85149", "#3fb950", "#e6a817", "#79c0ff", "#d2a8ff", "#56d4dd", "#c8c8c8"];
+var brights = ["#6e7681", "#ff7b72", "#56d364", "#e3b341", "#a5d6ff", "#f778ba", "#76e3ea", "#f0f6fc"];
+var backgrounds = ["#1a1a1a", "#6e1c1c", "#1a3b2a", "#3b2d00", "#0d2744", "#2d1b47", "#0d3035", "#3a3a3a"];
+function appendAnsiText(element, text) {
+  let color = "", background = "", bold = false;
+  const parts = text.split(/\x1b\[([0-9;]*)m/);
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0) {
+      if (!parts[i]) continue;
+      const span = element.ownerDocument.createElement("span");
+      span.textContent = parts[i];
+      span.style.color = color;
+      span.style.backgroundColor = background;
+      span.style.fontWeight = bold ? "bold" : "";
+      element.appendChild(span);
+    } else {
+      for (const code of (parts[i] || "0").split(";").map(Number)) {
+        if (code === 0) {
+          color = "";
+          background = "";
+          bold = false;
+        } else if (code === 1) bold = true;
+        else if (code === 22) bold = false;
+        else if (code >= 30 && code <= 37) color = foregrounds[code - 30];
+        else if (code >= 90 && code <= 97) color = brights[code - 90];
+        else if (code >= 40 && code <= 47) background = backgrounds[code - 40];
+        else if (code >= 100 && code <= 107) background = backgrounds[code - 100];
+        else if (code === 39) color = "";
+        else if (code === 49) background = "";
+      }
+    }
+  }
+}
+function initWifiLogMonitor(panel, win = window, { popout = false, onLine = () => {
+} } = {}) {
+  const doc = panel.ownerDocument;
+  panel.hidden = false;
+  panel.innerHTML = `
+    <div class="status-log-header"><h2>WiFi Log Monitor (UDP 7777)</h2></div>
+    <p class="flash-status" data-status role="status">Connecting...</p>
+    <div class="flash-row wifi-log-controls">
+      <button class="btn btn-outline" data-stop>Stop</button>
+      <button class="btn btn-outline" data-reconnect disabled>Reconnect</button>
+      <button class="btn btn-outline" data-clear>Clear</button>
+      <button class="btn btn-outline" data-popout>Pop Out</button>
+      <label><input type="checkbox" data-autoscroll checked> Auto-scroll</label>
+      <span data-count>0 lines</span>
+    </div>
+    <div class="status-log" data-output aria-live="polite"></div>`;
+  const get = (name) => panel.querySelector(`[data-${name}]`);
+  const output = get("output"), status = get("status"), stopButton = get("stop"), reconnectButton = get("reconnect");
+  let unsubscribe = null;
+  let generation = 0;
+  function append(text, error = false) {
+    for (const line of text.split(/\r?\n/)) {
+      if (!line) continue;
+      const div = doc.createElement("div");
+      div.className = `log-line${error ? " log-error" : ""}`;
+      if (error) div.textContent = line;
+      else appendAnsiText(div, line);
+      output.appendChild(div);
+    }
+    while (output.childElementCount > 2e3) output.firstElementChild.remove();
+    get("count").textContent = `${output.childElementCount} lines`;
+    if (get("autoscroll").checked) output.scrollTop = output.scrollHeight;
+  }
+  function stop() {
+    generation++;
+    unsubscribe?.();
+    unsubscribe = null;
+    stopButton.disabled = true;
+    reconnectButton.disabled = false;
+  }
+  function fail(message) {
+    stop();
+    status.textContent = `Error: ${message}`;
+    status.classList.add("is-error");
+    append(message, true);
+    if (/EACCES|EPERM|10013|access permissions/i.test(message)) {
+      append('Windows may be blocking UDP 7777. In an elevated PowerShell run:\nnetsh advfirewall firewall add rule name="FPGA WiFi Log UDP 7777" dir=in action=allow protocol=UDP localport=7777', true);
+    }
+  }
+  function start() {
+    const current = ++generation;
+    status.textContent = "Connecting...";
+    status.classList.remove("is-error");
+    stopButton.disabled = false;
+    reconnectButton.disabled = true;
+    unsubscribe = win.papilioDesktop.subscribeWifiLog(
+      (line) => {
+        if (current !== generation) return;
+        append(line);
+        onLine(line);
+      },
+      (event) => {
+        if (current !== generation) return;
+        if (event.type === "error") fail(event.message);
+        else status.textContent = event.message;
+      }
+    );
+  }
+  stopButton.addEventListener("click", () => {
+    stop();
+    status.classList.remove("is-error");
+    status.textContent = "Stopped";
+  });
+  reconnectButton.addEventListener("click", start);
+  get("clear").addEventListener("click", () => {
+    output.replaceChildren();
+    get("count").textContent = "0 lines";
+  });
+  get("popout").hidden = popout;
+  get("popout").addEventListener("click", async () => {
+    try {
+      await win.papilioDesktop.openWifiLogWindow();
+    } catch (err2) {
+      status.textContent = `Could not open WiFi log window: ${err2.message}`;
+      status.classList.add("is-error");
+    }
+  });
+  win.addEventListener("beforeunload", stop, { once: true });
+  start();
+  return { stop };
+}
+
 // ../../packages/loader-ui/src/loader-page.js
 function initLoaderPage(doc = document, win = window) {
   const capabilities = detectCapabilities(win);
@@ -9735,10 +10021,21 @@ function initLoaderPage(doc = document, win = window) {
     appVersion: doc.getElementById("app-version")
   };
   if (els.appVersion) {
-    els.appVersion.textContent = `v${true ? "0.4.7" : "dev"}`;
+    els.appVersion.textContent = `v${true ? "0.4.8" : "dev"}`;
   }
   const log = makeLogger(els.log);
   const otaPoster = createBrowserXhrPoster();
+  const library = capabilities.savedFilesFilesystem ? initSavedFiles(doc, win, validateSelectedFile) : { saveBeforeProgramming: async () => {
+  } };
+  if (capabilities.wifiLogUdp && win.papilioDesktop?.subscribeWifiLog && els.wifiLogPanel) {
+    initWifiLogMonitor(els.wifiLogPanel, win, {
+      onLine: (line) => {
+        if (!deviceIp) watchProvisioningLine(line, { onIp: (ip) => setDeviceIp(ip) });
+      }
+    });
+  } else {
+    els.wifiLogNote?.removeAttribute("hidden");
+  }
   let serialPort = null;
   let reader = null;
   let bootLogBuffer = "";
@@ -10369,6 +10666,7 @@ ${line}`.slice(-12e3);
         setStatus(els.statusFpga, "Selected file is not a Gowin FPGA bitstream.", "error");
         return;
       }
+      await library.saveBeforeProgramming("fpga", file);
       const ip = await prepareForProgramming(els.statusFpga, transportPreference);
       if (ip) {
         const responseText = await flashFpgaOta(otaPoster, ip, "/fpga-update", body, updateFpgaProgress);
@@ -10419,6 +10717,7 @@ ${line}`.slice(-12e3);
     clearActionLog();
     els.progressEsp32.hidden = false;
     try {
+      await library.saveBeforeProgramming("esp32", file);
       if (isMergedEsp32Image(data)) {
         await ensureUsbPort();
         await stopSerialListener();
@@ -10493,17 +10792,6 @@ ${line}`.slice(-12e3);
         els.btnLanScan.disabled = false;
       }
     });
-  }
-  if (capabilities.wifiLogUdp && win.papilioDesktop?.subscribeWifiLog && els.wifiLogPanel) {
-    els.wifiLogPanel.removeAttribute("hidden");
-    const wifiLogOutput = doc.getElementById("wifi-log-output");
-    const wifiLog = wifiLogOutput ? makeLogger(wifiLogOutput) : log;
-    win.papilioDesktop.subscribeWifiLog((line) => {
-      wifiLog(line);
-      if (!deviceIp) watchProvisioningLine(line, { onIp: (ip) => setDeviceIp(ip) });
-    });
-  } else {
-    els.wifiLogNote?.removeAttribute("hidden");
   }
   updateFlashFpgaEnabled();
   updateFlashEsp32Enabled();

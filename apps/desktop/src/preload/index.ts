@@ -22,11 +22,23 @@ contextBridge.exposeInMainWorld("papilioDesktop", {
     importZip: (data: ArrayBuffer) => ipcRenderer.invoke("papilio:saved-files-import-zip", Buffer.from(data)),
   },
 
-  subscribeWifiLog: (onLine: (line: string) => void) => {
-    ipcRenderer.invoke("papilio:wifi-log-subscribe");
+  openWifiLogWindow: () => ipcRenderer.invoke("papilio:wifi-log-open-window"),
+
+  subscribeWifiLog: (onLine: (line: string) => void, onStatus: (status: { type: string; message: string }) => void = () => {}) => {
     const listener = (_event: Electron.IpcRendererEvent, line: string) => onLine(line);
+    const statusListener = (_event: Electron.IpcRendererEvent, status: { type: string; message: string }) => onStatus(status);
     ipcRenderer.on("papilio:wifi-log-line", listener);
-    return () => ipcRenderer.removeListener("papilio:wifi-log-line", listener);
+    ipcRenderer.on("papilio:wifi-log-status", statusListener);
+    let active = true;
+    ipcRenderer.invoke("papilio:wifi-log-subscribe").catch((err: Error) => {
+      if (active) onStatus({ type: "error", message: err.message });
+    });
+    return () => {
+      active = false;
+      ipcRenderer.removeListener("papilio:wifi-log-line", listener);
+      ipcRenderer.removeListener("papilio:wifi-log-status", statusListener);
+      ipcRenderer.invoke("papilio:wifi-log-unsubscribe").catch((err: Error) => console.error("WiFi log unsubscribe failed:", err));
+    };
   },
 
   // Minimal fallback serial-port picker used only when Electron's

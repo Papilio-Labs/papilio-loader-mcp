@@ -8,28 +8,44 @@ import { createSocket, type Socket } from "node:dgram";
 export const WIFI_LOG_PORT = 7777;
 
 type Subscriber = (line: string) => void;
+export type WifiLogStatus = { type: "connected" | "error"; message: string };
 
-class WifiLogManager {
+export class WifiLogManager {
   private socket: Socket | null = null;
-  private readonly subscribers = new Set<Subscriber>();
+  private readonly subscribers = new Map<Subscriber, (status: WifiLogStatus) => void>();
+  private status: WifiLogStatus | null = null;
+
+  constructor(private readonly port = WIFI_LOG_PORT) {}
 
   private ensureStarted(): void {
     if (this.socket) return;
+    this.status = null;
     const socket = createSocket({ type: "udp4", reuseAddr: true });
     socket.on("message", (data) => {
       const line = data.toString("utf8").replace(/\r+$/g, "");
-      for (const subscriber of this.subscribers) subscriber(line);
+      for (const subscriber of this.subscribers.keys()) subscriber(line);
+    });
+    socket.on("listening", () => {
+      this.status = { type: "connected", message: `Listening on UDP ${socket.address().port}` };
+      for (const onStatus of this.subscribers.values()) onStatus(this.status);
     });
     socket.on("error", (err) => {
       console.error(`[wifi-log] UDP socket error: ${err.message}`);
+      this.status = { type: "error", message: err.message };
+      if (this.socket === socket) {
+        this.socket = null;
+        socket.close();
+      }
+      for (const onStatus of this.subscribers.values()) onStatus(this.status);
     });
-    socket.bind(WIFI_LOG_PORT);
     this.socket = socket;
+    socket.bind(this.port);
   }
 
-  subscribe(callback: Subscriber): () => void {
+  subscribe(callback: Subscriber, onStatus: (status: WifiLogStatus) => void): () => void {
+    this.subscribers.set(callback, onStatus);
     this.ensureStarted();
-    this.subscribers.add(callback);
+    if (this.status) onStatus(this.status);
     return () => this.unsubscribe(callback);
   }
 
@@ -41,6 +57,7 @@ class WifiLogManager {
       this.socket.close();
       this.socket = null;
     }
+    if (this.subscribers.size === 0) this.status = null;
   }
 }
 

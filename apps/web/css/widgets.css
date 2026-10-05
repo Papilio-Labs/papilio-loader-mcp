@@ -132,6 +132,8 @@
 
 .flash-row input[type="text"],
 .flash-row input[type="password"],
+.save-file-fields input[type="text"],
+.saved-file-dialog input[type="text"],
 .flash-row select {
   flex: 1 1 200px;
   background: var(--bg-alt);

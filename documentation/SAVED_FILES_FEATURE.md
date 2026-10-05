@@ -4,6 +4,43 @@
 
 The Papilio Loader now includes a **Saved Files Library** that allows you to save frequently-used firmware files with descriptions for easy reuse.
 
+## Electron Desktop App
+
+The shared loader page exposes the library only when running in Electron.
+The hosted website has no saved-file library and continues to use local file selection.
+
+- Select an FPGA or ESP32 `.bin`, optionally enter a saved filename and description,
+  and click **Save to Library**. No board connection or programming is required.
+  Saved names and renames automatically keep the `.bin` suffix when it is omitted.
+- Alternatively, check **Save this file to library before programming** and press
+  **Program**. A save error prevents programming; a successful save remains in the
+  library even if programming fails. The checkbox clears after saving.
+- Expand **Saved Files Library** and filter by All Files, FPGA, or ESP32.
+- **Load** restores the file into its corresponding programming card and runs the
+  usual image validation. **Rename**, **Edit Description**, and **Delete** manage it.
+- **Export ZIP** backs up the library. **Import ZIP** accepts both Electron exports
+  and the old Python loader's `manifest.json` ZIP exports. Imports add copies with
+  new IDs, preserving existing files even when display names match.
+
+Electron stores `saved_files_index.json` and a `saved_files` directory under
+Electron's `app.getPath("userData")` (under `%APPDATA%` on Windows).
+It does not read or replace the Python SQLite database. To migrate, export from
+the Python loader and import that ZIP into Electron.
+
+Individual files and imported ZIPs are limited to 50 MB; the total uncompressed
+content of one import is also limited to 50 MB. Invalid/incomplete archives,
+corrupt indexes, and missing file content are reported rather than silently skipped.
+
+### Development validation
+
+From the repository root, `npm test` runs the core and desktop regression tests.
+After building the web and desktop workspaces, run
+`npm run test:smoke --workspace=apps/desktop` for the real Electron UI test.
+It uses a temporary isolated user-data directory, exercises saved-file operations
+and the UDP pop-out lifecycle, and never connects to or programs hardware.
+
+The sections below describe the legacy Python implementation.
+
 ## Features
 
 ✅ **Persistent Storage** - Files saved to disk with SQLite database  

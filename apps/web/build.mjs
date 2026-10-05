@@ -21,6 +21,7 @@ const shared = {
 const entries = [
   { entry: "src/getting-started-entry.js", outfile: "getting-started/getting-started.bundle.js" },
   { entry: "src/loader-entry.js", outfile: "loader/loader.bundle.js" },
+  { entry: "src/wifi-log-entry.js", outfile: "wifi-log/wifi-log.bundle.js" },
 ];
 
 const watch = process.argv.includes("--watch");

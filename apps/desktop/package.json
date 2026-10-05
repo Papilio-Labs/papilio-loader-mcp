@@ -1,13 +1,16 @@
 {
   "name": "@papilio-loader/desktop",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.8",
   "description": "Papilio Loader desktop app (Electron) — wraps the same loader-ui/flasher-core web build with WebSerial select-serial-port support, LAN discovery, UDP WiFi log monitor, saved-files, and an in-process MCP server.",
   "author": "Gadget Factory",
   "type": "commonjs",
   "main": "dist/main/index.js",
   "scripts": {
     "build": "node build.mjs",
+    "test": "vitest run",
+    "test:smoke": "node test/run-smoke.mjs",
+    "test:layout": "node test/run-smoke.mjs --layout",
     "watch": "node build.mjs --watch",
     "start": "npm run build && electron .",
     "mcp": "npm run build && node dist/bin/mcp-server.mjs",
@@ -26,6 +29,7 @@
     "electron": "43.2.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.10"
   }
 }

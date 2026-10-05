@@ -1,7 +1,7 @@
 {
   "name": "papilio-loader",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.8",
   "description": "Unified Papilio Loader — one flasher-core + UI, packaged as web static build and Electron desktop app",
   "workspaces": [
     "packages/*",
@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspace=packages/flasher-core && npm run build --workspace=apps/web",
-    "test": "npm run test --workspace=packages/flasher-core",
+    "test": "npm run test --workspace=packages/flasher-core && npm run test --workspace=apps/desktop",
     "dev:web": "npm run build --workspace=apps/web && npm run serve --workspace=apps/web",
     "dev:desktop": "npm run start --workspace=apps/desktop"
   },
